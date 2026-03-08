@@ -53,7 +53,7 @@ To see the app on your physical device:
    ```bash
    npm start
    ```
-2. **Android**: Scan the QR code shown in the terminal using the **Expo Go** app.
+2. **Android**: Scan the QR code shown in the terminal using the **Expo Go (from the playstore)** app.
 3. **iOS**: Use the Camera app to scan the QR code and open in Expo Go.
 
 Alternatively, if you have an Android emulator set up:
