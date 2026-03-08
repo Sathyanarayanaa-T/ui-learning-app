@@ -70,5 +70,3 @@ npm run android
 - `hooks/`: Custom React hooks for theme and logic.
 - `services/`: API and mock data services.
 
-## 📄 License
-This project is proprietary and built for Hexaware Trainee Training.
