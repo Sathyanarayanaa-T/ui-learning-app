@@ -1,4 +1,4 @@
-# Hexaware Learning Path & AI Tutor
+# Learning Path & AI Tutor
 
 A high-performance, aesthetic cross-platform (Web & Mobile) learning application for trainees. Built with React Native and Expo, featuring a personalized roadmap generator and an interactive AI Tutor.
 
