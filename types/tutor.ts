@@ -1,52 +1,73 @@
 // ============================================================
-// AI Tutor — TypeScript Interfaces (Real API)
+// AI Tutor — TypeScript Interfaces (New API)
 // Base URL: http://localhost:8001/api/v1
 // ============================================================
+
+export type ChatMode = 'normal' | 'teaching' | 'guiding';
 
 // ─── Request Models ──────────────────────────────────────────
 
 export interface ChatRequest {
-    userId: string;
-    topicId: string;  // Frontend-defined topic slug, e.g. "react-hooks"
+    session_id: string;
     message: string;
+    mode: ChatMode;
+}
+
+export interface DocumentQuestionRequest {
+    session_id: string;
+    document_id: string;
+    question: string;
+    mode: ChatMode;
 }
 
 // ─── Response Models ─────────────────────────────────────────
 
-export interface ChatReply {
-    reply: string;          // Markdown — always render with a Markdown lib
-    chatId: string;         // UUID assigned by backend
-    tokensUsed: number;
-    estimatedCost: number;
+export interface ChatResponse {
+    session_id: string;
+    user_message: string;
+    ai_response: string;
+    mode: string;
+    timestamp: string;
+    tokens_used: number;
 }
 
-export interface ChatMessageResponse {
-    status: string;
-    data: ChatReply;
+export interface SessionCreateResponse {
+    session_id: string;
+    created_at: string;
+    status: 'active' | 'closed';
 }
 
-export interface HistoryItem {
-    chatId: string;
-    message: string;
-    reply: string;          // Markdown
-    timestamp: string;      // ISO 8601 UTC
+export interface HistoryMessage {
+    role: 'user' | 'assistant';
+    content: string;
+    timestamp: string;
 }
 
 export interface ChatHistoryResponse {
-    status: string;
-    data: HistoryItem[];
+    session_id: string;
+    messages: HistoryMessage[];
+    total_messages: number;
+    session_duration_minutes?: number;
 }
 
-export interface UsageData {
-    userId: string;
-    totalMessages: number;
-    tokensUsed: number;
-    estimatedCost: number;
+export interface DocumentUploadResponse {
+    status: string;
+    document_id: string;
+    filename: string;
+    file_type: string;
+    content_preview: string;
+    total_characters: number;
+    message: string;
 }
 
-export interface UsageResponse {
-    status: string;
-    data: UsageData;
+export interface DocumentQuestionResponse {
+    session_id: string;
+    document_id: string;
+    question: string;
+    answer: string;
+    mode: string;
+    timestamp: string;
+    document_referenced: boolean;
 }
 
 // ─── Local (UI) Models ────────────────────────────────────────
@@ -57,11 +78,12 @@ export interface ChatMessage {
     role: 'user' | 'assistant';
     text: string;
     timestamp: string;
-    tokensUsed?: number;    // populated on assistant messages
+    tokensUsed?: number;
 }
 
-// topic is a local UI concept: user types free text, we slug-ify it as topicId
-export interface TutorSession {
-    topicId: string;   // slug sent to API
-    topicLabel: string; // human-readable label shown in the chat header
+export interface LocalSession {
+    session_id: string;
+    title: string;       // Dynamic local name, set on first message
+    createdAt: string;
+    messageCount: number;
 }

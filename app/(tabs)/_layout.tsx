@@ -8,11 +8,9 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useAppStore } from '../../store/useAppStore';
 import { useColors } from '../../hooks/useColors';
 import { Colors, Shadow, FontSize, FontWeight } from '../../constants/theme';
-import { GlobalMockBanner } from '../../components/molecules/GlobalMockBanner';
+
 
 const TABS: Record<string, { icon: keyof typeof Ionicons.glyphMap; label: string }> = {
-    roadmap: { icon: 'map-outline', label: 'Roadmap' },
-    history: { icon: 'book-outline', label: 'History' },
     tutor: { icon: 'chatbubbles-outline', label: 'AI Tutor' },
 };
 
@@ -75,12 +73,9 @@ export default function TabsLayout() {
                 screenOptions={{ headerShown: false }}
                 tabBar={(props) => <CustomTabBar {...props} />}
             >
-                <Tabs.Screen name="roadmap" />
-                <Tabs.Screen name="history" />
                 <Tabs.Screen name="tutor" />
             </Tabs>
-            {/* Banner sits above all tab content, slides in from top */}
-            <GlobalMockBanner />
+
         </View>
     );
 }

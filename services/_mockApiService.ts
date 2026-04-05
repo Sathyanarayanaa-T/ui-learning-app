@@ -5,10 +5,7 @@
 
 import type { GeneratePathPayload, LearningPath, UserHistory } from '../types';
 
-const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
-
 export async function generatePath(payload: GeneratePathPayload): Promise<LearningPath> {
-    await delay(800);
     return {
         user_id: payload.user_id,
         role: payload.role,
@@ -51,7 +48,6 @@ export async function generatePath(payload: GeneratePathPayload): Promise<Learni
 }
 
 export async function getUserHistory(userId: string): Promise<UserHistory> {
-    await delay(600);
     return {
         user_id: userId,
         total: 2,

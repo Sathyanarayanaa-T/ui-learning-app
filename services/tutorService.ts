@@ -1,92 +1,77 @@
 // ============================================================
-// AI Tutor — Service Layer (Real API + mock fallback)
-// Base URL: http://localhost:8001/api/v1
+// AI Tutor — Service Layer (Live API)
 // ============================================================
+import { Platform } from 'react-native';
 import type {
-    ChatRequest, ChatMessageResponse,
-    ChatHistoryResponse, UsageResponse,
+    ChatRequest, ChatResponse,
+    SessionCreateResponse, ChatHistoryResponse,
+    DocumentUploadResponse, DocumentQuestionRequest, DocumentQuestionResponse,
 } from '../types/tutor';
 
-const BASE_URL = 'http://localhost:8001/api/v1';
+// Configure base URL based on platform for local development
+const API_BASE_URL = Platform.OS === 'android' 
+    ? 'http://10.0.2.2:8000' 
+    : 'http://localhost:8000';
 
-// ─── Mock fallback helpers ────────────────────────────────────
-const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-const mockChatReply = (message: string): ChatMessageResponse => ({
-    status: 'success',
-    data: {
-        reply: `Great question!\n\nHere's what I know about **"${message.slice(0, 40)}..."**:\n\nThis is a demo response — the AI Tutor server at \`localhost:8001\` is not reachable right now.\n\nOnce the backend is running, you'll get real GPT-4o-mini responses here. 🚀`,
-        chatId: `mock_${Date.now()}`,
-        tokensUsed: 0,
-        estimatedCost: 0,
-    },
-});
-
-const MOCK_HISTORY: ChatHistoryResponse = {
-    status: 'success',
-    data: [
-        {
-            chatId: 'mock_h1',
-            message: 'What is a closure in JavaScript?',
-            reply: 'A **closure** is a function that retains access to its lexical scope.\n\n```js\nfunction outer() {\n  const x = 10;\n  return () => x;\n}\nconsole.log(outer()()); // 10\n```',
-            timestamp: new Date(Date.now() - 3_600_000).toISOString(),
-        },
-    ],
-};
-
-export interface TutorApiResult<T> {
-    data: T;
-    usedMock: boolean;
+// ─── POST /session/create ──────────────────────────────────────
+export async function createSession(): Promise<SessionCreateResponse> {
+    const res = await fetch(`${API_BASE_URL}/session/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    return res.json();
 }
 
-// ─── POST /api/v1/chat/ ───────────────────────────────────────
-export async function sendChat(
-    req: ChatRequest,
-): Promise<TutorApiResult<ChatMessageResponse>> {
-    try {
-        const res = await fetch(`${BASE_URL}/chat/`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(req),
-        });
-        if (!res.ok) throw new Error(`Server error: ${res.status}`);
-        return { data: await res.json(), usedMock: false };
-    } catch {
-        await delay(900); // realistic typing feel
-        return { data: mockChatReply(req.message), usedMock: true };
-    }
+// ─── POST /ai/chat ─────────────────────────────────────────────
+export async function sendChat(req: ChatRequest): Promise<ChatResponse> {
+    const res = await fetch(`${API_BASE_URL}/ai/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req),
+    });
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    return res.json();
 }
 
-// ─── GET /api/v1/chat/history/{user_id} ──────────────────────
-export async function fetchChatHistory(
-    userId: string,
-): Promise<TutorApiResult<ChatHistoryResponse>> {
-    try {
-        const res = await fetch(`${BASE_URL}/chat/history/${userId}`);
-        if (!res.ok) throw new Error(`Server error: ${res.status}`);
-        return { data: await res.json(), usedMock: false };
-    } catch {
-        await delay(400);
-        return { data: MOCK_HISTORY, usedMock: true };
-    }
+// ─── GET /ai/chat/history/{session_id} ────────────────────────
+export async function getHistory(session_id: string): Promise<ChatHistoryResponse> {
+    const res = await fetch(`${API_BASE_URL}/ai/chat/history/${session_id}`);
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    return res.json();
 }
 
-// ─── GET /api/v1/usage/{user_id} ─────────────────────────────
-export async function fetchUsage(
-    userId: string,
-): Promise<TutorApiResult<UsageResponse>> {
-    try {
-        const res = await fetch(`${BASE_URL}/usage/${userId}`);
-        if (!res.ok) throw new Error(`Server error: ${res.status}`);
-        return { data: await res.json(), usedMock: false };
-    } catch {
-        await delay(300);
-        return {
-            data: {
-                status: 'success',
-                data: { userId, totalMessages: 0, tokensUsed: 0, estimatedCost: 0 },
-            },
-            usedMock: true,
-        };
+// ─── POST /documents/upload ──────────────────────────────────
+export async function uploadDocument(doc: any, session_id: string): Promise<DocumentUploadResponse> {
+    const formData = new FormData();
+    
+    if (Platform.OS === 'web' && doc.file) {
+        // Native web javascript File object
+        formData.append('file', doc.file);
+    } else {
+        // Native Mobile (iOS/Android) 
+        formData.append('file', {
+            uri: Platform.OS === 'ios' ? doc.uri.replace('file://', '') : doc.uri,
+            type: doc.mimeType || 'application/octet-stream',
+            name: doc.name,
+        } as any);
     }
+
+    const res = await fetch(`${API_BASE_URL}/documents/upload?session_id=${session_id}`, {
+        method: 'POST',
+        body: formData,
+    });
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    return res.json();
+}
+
+// ─── POST /documents/ask ─────────────────────────────────────
+export async function askDocumentQuestion(req: DocumentQuestionRequest): Promise<DocumentQuestionResponse> {
+    const res = await fetch(`${API_BASE_URL}/documents/ask`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req),
+    });
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    return res.json();
 }

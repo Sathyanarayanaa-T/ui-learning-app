@@ -1,207 +1,285 @@
 // ============================================================
-// AI Tutor — Zustand Store (Real API)
+// AI Tutor — Zustand Store (New API structure)
 // ============================================================
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { ChatMessage, TutorSession, UsageData } from '../types/tutor';
-import { sendChat, fetchChatHistory, fetchUsage } from '../services/tutorService';
-
-const toSlug = (label: string) =>
-    label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 60);
+import type { ChatMessage, LocalSession, ChatMode } from '../types/tutor';
+import { createSession, sendChat, getHistory, uploadDocument, askDocumentQuestion } from '../services/tutorService';
 
 const mkId = () => `${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-const RECENT_TOPICS_KEY = 'tutor_recent_topics';
-const SESSION_CACHE_KEY = (slug: string) => `tutor_session_${slug}`;
+const SESSIONS_KEY = 'tutor_recent_sessions';
+const SESSION_CACHE_KEY = (sessionId: string) => `tutor_session_cache_${sessionId}`;
 
-// ─── Types ───────────────────────────────────────────────────
+// ─── Internal Storage Helpers ─────────────────────────────────
 
-export interface RecentTopic {
-    topicId: string;       // slug
-    topicLabel: string;    // human label the user typed
-    lastUsed: string;      // ISO timestamp
-    messageCount: number;
+async function persistSessions(sessions: LocalSession[]) {
+    try { await AsyncStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions)); } catch (_) { }
 }
 
-interface TutorState {
-    // ── Recent Topics ─────────────────────────────────────────
-    recentTopics: RecentTopic[];
-    loadRecentTopics: () => Promise<void>;
-    addRecentTopic: (topicLabel: string, topicId: string) => Promise<void>;
-    removeRecentTopic: (topicId: string) => Promise<void>;
-
-    // ── Session (local-only concept) ─────────────────────────
-    session: TutorSession | null;
-    isStarting: boolean;
-    startSession: (topicLabel: string) => void;
-
-    // ── Restore (continue past session) ──────────────────────
-    isRestoring: boolean;
-    restoreSession: (topic: RecentTopic, userId: string) => Promise<void>;
-
-    // ── Messages ─────────────────────────────────────────────
-    messages: ChatMessage[];
-    isTyping: boolean;
-    sendMessage: (text: string, userId: string) => Promise<void>;
-    clearChat: () => void;
-    loadHistory: (userId: string) => Promise<void>;
-
-    // ── Usage ────────────────────────────────────────────────
-    usage: UsageData | null;
-    loadUsage: (userId: string) => Promise<void>;
-
-    // ── Mock fallback tracking ────────────────────────────────
-    usingMockFallback: boolean;
+async function persistSessionCache(sessionId: string, messages: ChatMessage[]) {
+    try { await AsyncStorage.setItem(SESSION_CACHE_KEY(sessionId), JSON.stringify(messages)); } catch (_) { }
 }
 
-// ─── Helpers ─────────────────────────────────────────────────
-
-async function persistRecentTopics(topics: RecentTopic[]) {
-    try { await AsyncStorage.setItem(RECENT_TOPICS_KEY, JSON.stringify(topics)); } catch (_) { }
-}
-
-async function persistSessionCache(topicId: string, messages: ChatMessage[]) {
-    try { await AsyncStorage.setItem(SESSION_CACHE_KEY(topicId), JSON.stringify(messages)); } catch (_) { }
-}
-
-async function loadSessionCache(topicId: string): Promise<ChatMessage[]> {
+async function loadSessionCache(sessionId: string): Promise<ChatMessage[]> {
     try {
-        const raw = await AsyncStorage.getItem(SESSION_CACHE_KEY(topicId));
+        const raw = await AsyncStorage.getItem(SESSION_CACHE_KEY(sessionId));
         return raw ? JSON.parse(raw) : [];
     } catch { return []; }
 }
 
-// ─── Store ───────────────────────────────────────────────────
+// ─── Store Interface ──────────────────────────────────────────
+
+interface TutorState {
+    // ── Sessions & History ────────────────────────────────────
+    sessions: LocalSession[];
+    loadSessions: () => Promise<void>;
+    removeSession: (sessionId: string) => Promise<void>;
+
+    // ── Active Chat State ─────────────────────────────────────
+    activeSessionId: string | null;
+    activeSessionTitle: string;
+    activeDocumentId: string | null;
+    activeDocumentName: string | null;
+    chatMode: ChatMode;
+    setChatMode: (mode: ChatMode) => void;
+    
+    isStarting: boolean;
+    startNewSession: () => Promise<void>;
+    
+    isRestoring: boolean;
+    restoreSession: (session: LocalSession) => Promise<void>;
+
+    clearActiveChat: () => void; // Go back to empty state
+    
+    // ── Document State ────────────────────────────────────────
+    isUploading: boolean;
+    uploadFile: (doc: any) => Promise<void>;
+    clearActiveDocument: () => void;
+
+    // ── Messages ─────────────────────────────────────────────
+    messages: ChatMessage[];
+    isTyping: boolean;
+    sendMessage: (text: string) => Promise<void>;
+}
+
+// ─── Store Implementation ──────────────────────────────────────
 
 export const useTutorStore = create<TutorState>((set, get) => ({
-    // ── Recent Topics ─────────────────────────────────────────
-    recentTopics: [],
+    // ── Sessions & History
+    sessions: [],
 
-    loadRecentTopics: async () => {
+    loadSessions: async () => {
         try {
-            const raw = await AsyncStorage.getItem(RECENT_TOPICS_KEY);
-            const topics: RecentTopic[] = raw ? JSON.parse(raw) : [];
-            set({ recentTopics: topics });
+            const raw = await AsyncStorage.getItem(SESSIONS_KEY);
+            const loaded: LocalSession[] = raw ? JSON.parse(raw) : [];
+            set({ sessions: loaded });
         } catch (_) { }
     },
 
-    addRecentTopic: async (topicLabel, topicId) => {
-        const existing = get().recentTopics.filter((t) => t.topicId !== topicId);
-        const updated: RecentTopic[] = [
-            { topicId, topicLabel, lastUsed: new Date().toISOString(), messageCount: 0 },
-            ...existing,
-        ].slice(0, 10); // keep at most 10
-        set({ recentTopics: updated });
-        await persistRecentTopics(updated);
+    removeSession: async (sessionId) => {
+        const updated = get().sessions.filter((s) => s.session_id !== sessionId);
+        set({ sessions: updated });
+        await persistSessions(updated);
+        try { await AsyncStorage.removeItem(SESSION_CACHE_KEY(sessionId)); } catch (_) { }
     },
 
-    removeRecentTopic: async (topicId) => {
-        const updated = get().recentTopics.filter((t) => t.topicId !== topicId);
-        set({ recentTopics: updated });
-        await persistRecentTopics(updated);
-        try { await AsyncStorage.removeItem(SESSION_CACHE_KEY(topicId)); } catch (_) { }
-    },
+    // ── Active Chat State
+    activeSessionId: null,
+    activeSessionTitle: '',
+    activeDocumentId: null,
+    activeDocumentName: null,
+    chatMode: 'normal',
 
-    // ── Session ───────────────────────────────────────────────
-    session: null,
+    setChatMode: (mode) => set({ chatMode: mode }),
+
     isStarting: false,
 
-    startSession: (topicLabel) => {
-        const topicId = toSlug(topicLabel);
-        set({ session: { topicId, topicLabel }, messages: [] });
-        // Save to recent topics (fire and forget)
-        get().addRecentTopic(topicLabel, topicId);
+    startNewSession: async () => {
+        set({ isStarting: true });
+        try {
+            const res = await createSession();
+            set({
+                activeSessionId: res.session_id,
+                activeSessionTitle: '', // Will be set on first message
+                activeDocumentId: null,
+                activeDocumentName: null,
+                messages: [],
+                isStarting: false,
+            });
+            // We don't add to sessions list until the first message is sent, 
+            // to avoid cluttering history with completely empty sessions.
+        } catch (error) {
+            console.error("Failed to create session", error);
+            set({ isStarting: false });
+        }
     },
 
-    // ── Restore session ───────────────────────────────────────
     isRestoring: false,
 
-    restoreSession: async (topic, userId) => {
-        set({ isRestoring: true, session: { topicId: topic.topicId, topicLabel: topic.topicLabel }, messages: [] });
+    restoreSession: async (session) => {
+        set({
+            isRestoring: true,
+            activeSessionId: session.session_id,
+            activeSessionTitle: session.title,
+            activeDocumentId: null,
+            activeDocumentName: null,
+            messages: []
+        });
 
-        // First try local cache (fast, no network)
-        const cached = await loadSessionCache(topic.topicId);
-        if (cached.length > 0) {
-            set({ messages: cached, isRestoring: false });
-            return;
+        // Try local cache first
+        let msgs = await loadSessionCache(session.session_id);
+        
+        // If empty locally, fallback to mock API
+        if (msgs.length === 0) {
+            try {
+                const historyRes = await getHistory(session.session_id);
+                msgs = historyRes.messages.map((m, i) => ({
+                    id: `${m.timestamp}_${i}`,
+                    role: m.role,
+                    text: m.content,
+                    timestamp: m.timestamp,
+                }));
+                // Save it back to cache
+                await persistSessionCache(session.session_id, msgs);
+            } catch (err) {
+                console.error("Failed to load history", err);
+            }
         }
 
-        // Fall back to API history (returns all topics; filter by topicId note: API
-        // doesn't return topicId per message, so we show all — acceptable per API docs)
-        const { data: envelope, usedMock } = await fetchChatHistory(userId);
-        const msgs: ChatMessage[] = [];
-        envelope.data.forEach((item) => {
-            msgs.push({ id: `${item.chatId}_q`, role: 'user', text: item.message, timestamp: item.timestamp });
-            msgs.push({ id: `${item.chatId}_a`, role: 'assistant', text: item.reply, timestamp: item.timestamp });
-        });
-        set({ messages: msgs, isRestoring: false, usingMockFallback: usedMock });
+        set({ messages: msgs, isRestoring: false });
     },
 
-    // ── Messages ──────────────────────────────────────────────
+    clearActiveChat: () => set({ activeSessionId: null, activeSessionTitle: '', activeDocumentId: null, activeDocumentName: null, messages: [] }),
+
+    // ── Document State
+    isUploading: false,
+    
+    uploadFile: async (doc: any) => {
+        const { activeSessionId } = get();
+        if (!activeSessionId) return;
+        
+        set({ isUploading: true });
+        try {
+            const res = await uploadDocument(doc, activeSessionId);
+            set({ activeDocumentId: res.document_id, activeDocumentName: res.filename, isUploading: false });
+            
+            // Add automatic system-like message to chat
+            const sysMsg: ChatMessage = {
+                id: mkId(),
+                role: 'assistant',
+                text: `📄 Document **${res.filename}** uploaded successfully. What would you like to know about it?`,
+                timestamp: new Date().toISOString(),
+            };
+            set((s) => {
+                const updated = [...s.messages, sysMsg];
+                persistSessionCache(activeSessionId, updated);
+                return { messages: updated };
+            });
+        } catch (error) {
+            console.error("Upload failed", error);
+            set({ isUploading: false });
+        }
+    },
+    
+    clearActiveDocument: () => set({ activeDocumentId: null, activeDocumentName: null }),
+
+    // ── Messages
     messages: [],
     isTyping: false,
 
-    sendMessage: async (text, userId) => {
-        const { session } = get();
-        if (!session) return;
+    sendMessage: async (text) => {
+        const { activeSessionId, chatMode, sessions, activeSessionTitle, activeDocumentId } = get();
+        if (!activeSessionId) return;
 
+        // 1. Add user message locally
         const userMsg: ChatMessage = { id: mkId(), role: 'user', text, timestamp: new Date().toISOString() };
-        set((s) => ({ messages: [...s.messages, userMsg], isTyping: true }));
+        
+        // 2. Resolve title (first message defines title if currently empty)
+        let newTitle = activeSessionTitle;
+        let isFirstMessage = false;
+        if (!newTitle) {
+            newTitle = text;
+            isFirstMessage = true;
+        }
 
-        const { data: envelope, usedMock } = await sendChat({
-            userId, topicId: session.topicId, message: text,
-        });
+        set((s) => ({
+            messages: [...s.messages, userMsg],
+            activeSessionTitle: newTitle,
+            isTyping: true 
+        }));
 
-        const replyText = envelope.data.reply;
-        const isOpenAIError = replyText.startsWith("Sorry, I couldn't");
-
-        const aiMsg: ChatMessage = {
-            id: envelope.data.chatId,
-            role: 'assistant',
-            text: isOpenAIError ? "⚠️ The AI couldn't process that. Please try again." : replyText,
-            timestamp: new Date().toISOString(),
-            tokensUsed: envelope.data.tokensUsed,
-        };
-
-        set((s) => {
-            const updatedMessages = [...s.messages, aiMsg];
-            // Persist session cache after every new message
-            persistSessionCache(session.topicId, updatedMessages);
-            // Update message count in recent topics
-            const updatedTopics = s.recentTopics.map((t) =>
-                t.topicId === session.topicId
-                    ? { ...t, messageCount: Math.ceil(updatedMessages.length / 2), lastUsed: new Date().toISOString() }
-                    : t
+        // 3. Update session list if it was a new session or we need to update message count
+        const currentMessagesCount = get().messages.length;
+        let updatedSessions = [...sessions];
+        
+        if (isFirstMessage) {
+            updatedSessions.unshift({
+                session_id: activeSessionId,
+                title: newTitle,
+                createdAt: new Date().toISOString(),
+                messageCount: 1,
+            });
+        } else {
+            updatedSessions = updatedSessions.map(s => 
+                s.session_id === activeSessionId ? { ...s, messageCount: Math.ceil(currentMessagesCount / 2) } : s
             );
-            persistRecentTopics(updatedTopics);
-            return {
-                messages: updatedMessages,
-                recentTopics: updatedTopics,
-                isTyping: false,
-                usingMockFallback: usedMock || s.usingMockFallback,
+        }
+        set({ sessions: updatedSessions });
+        await persistSessions(updatedSessions);
+
+        // 4. Send to backend
+        try {
+            let replyText = '';
+            let tokensUsed = 0;
+            let respTimestamp = new Date().toISOString();
+
+            if (activeDocumentId) {
+                // Route to document ask
+                const apiRes = await askDocumentQuestion({
+                    session_id: activeSessionId,
+                    document_id: activeDocumentId,
+                    question: text,
+                    mode: chatMode
+                });
+                replyText = apiRes.answer;
+                respTimestamp = apiRes.timestamp;
+            } else {
+                // Route to normal chat
+                const apiRes = await sendChat({
+                    session_id: activeSessionId,
+                    message: text,
+                    mode: chatMode
+                });
+                replyText = apiRes.ai_response;
+                tokensUsed = apiRes.tokens_used;
+                respTimestamp = apiRes.timestamp;
+            }
+
+            const aiMsg: ChatMessage = {
+                id: mkId(), // we use local ID for uniqueness in list
+                role: 'assistant',
+                text: replyText,
+                timestamp: respTimestamp,
+                tokensUsed,
             };
-        });
+
+            set((s) => {
+                const finalMessages = [...s.messages, aiMsg];
+                persistSessionCache(activeSessionId, finalMessages);
+                return { messages: finalMessages, isTyping: false };
+            });
+            
+        } catch (error) {
+            set((s) => {
+                const errorMsg: ChatMessage = {
+                    id: mkId(),
+                    role: 'assistant',
+                    text: '⚠️ The AI encountered an error processing your request. Please try again.',
+                    timestamp: new Date().toISOString(),
+                };
+                return { messages: [...s.messages, errorMsg], isTyping: false };
+            });
+        }
     },
-
-    clearChat: () => set({ messages: [], session: null }),
-
-    loadHistory: async (userId) => {
-        const { data: envelope, usedMock } = await fetchChatHistory(userId);
-        const msgs: ChatMessage[] = [];
-        envelope.data.forEach((item) => {
-            msgs.push({ id: `${item.chatId}_q`, role: 'user', text: item.message, timestamp: item.timestamp });
-            msgs.push({ id: `${item.chatId}_a`, role: 'assistant', text: item.reply, timestamp: item.timestamp });
-        });
-        set({ messages: msgs, usingMockFallback: usedMock });
-    },
-
-    // ── Usage ─────────────────────────────────────────────────
-    usage: null,
-    loadUsage: async (userId) => {
-        const { data: envelope, usedMock } = await fetchUsage(userId);
-        set({ usage: envelope.data, usingMockFallback: usedMock || get().usingMockFallback });
-    },
-
-    // ── Mock fallback ─────────────────────────────────────────
-    usingMockFallback: false,
 }));
