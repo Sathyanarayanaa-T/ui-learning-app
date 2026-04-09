@@ -86,4 +86,5 @@ export interface LocalSession {
     title: string;       // Dynamic local name, set on first message
     createdAt: string;
     messageCount: number;
+    mode?: ChatMode;
 }

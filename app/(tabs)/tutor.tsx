@@ -76,11 +76,8 @@ export default function TutorScreen() {
     if (!isChatActive) {
         return (
             <View style={[styles.root, { backgroundColor: colors.light }]}>
-                <LinearGradient
-                    colors={[Colors.darkBlue, Colors.hexawareBlue]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={[styles.header, { paddingTop: Math.max(insets.top, 40), zIndex: 10, elevation: 10 }]}
+                <View
+                    style={[styles.header, { backgroundColor: Colors.darkBlue, paddingTop: Math.max(insets.top, 16), zIndex: 10, elevation: 10 }]}
                 >
                     <WebContainer>
                         <View style={styles.headerInner}>
@@ -90,7 +87,7 @@ export default function TutorScreen() {
                             </View>
                         </View>
                     </WebContainer>
-                </LinearGradient>
+                </View>
 
                 <ScrollView
                     contentContainerStyle={styles.emptyScrollContent}
@@ -101,54 +98,79 @@ export default function TutorScreen() {
                         <View style={styles.centeredInputSection}>
                             <Ionicons name="hardware-chip" size={52} color={Colors.canary} style={{ marginBottom: Spacing.md }} />
                             <AppText variant="title" style={styles.emptyTitle}>Ready to start learning?</AppText>
-                            
-                            <TouchableOpacity
-                                onPress={startNewSession}
-                                disabled={isStarting}
-                                activeOpacity={0.8}
-                                style={[styles.startBtn, { backgroundColor: colors.hexawareBlue }, Shadow.md]}
-                            >
-                                {isStarting ? (
-                                    <ActivityIndicator color={Colors.snow} />
-                                ) : (
-                                    <>
-                                        <Ionicons name="chatbubbles" size={20} color={Colors.snow} />
-                                        <AppText style={styles.startBtnText}>Start New Session</AppText>
-                                    </>
-                                )}
-                            </TouchableOpacity>
+                            <View style={styles.startModesContainer}>
+                                {MODES.map((mode) => (
+                                    <TouchableOpacity
+                                        key={mode.value}
+                                        onPress={() => startNewSession(mode.value)}
+                                        disabled={isStarting}
+                                        activeOpacity={0.8}
+                                        style={[styles.startModeCard, Shadow.sm, { backgroundColor: colors.snow, borderColor: colors.borderLight }]}
+                                    >
+                                        <View style={[styles.startModeIcon, { backgroundColor: colors.hexawareBlue + '15' }]}>
+                                            <Ionicons name={mode.icon} size={24} color={colors.hexawareBlue} />
+                                        </View>
+                                        <View style={styles.startModeBody}>
+                                            <AppText style={styles.startModeTitle}>{mode.label}</AppText>
+                                            <AppText style={styles.startModeDesc} numberOfLines={2}>
+                                                {mode.value === 'normal' ? 'Direct Q&A answers and explanations' : mode.value === 'teaching' ? 'Detailed conceptual breakdowns' : 'Socratic hints and guided learning'}
+                                            </AppText>
+                                        </View>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
                         </View>
 
                         {/* ── Session History ── */}
                         {sessions.length > 0 && (
                             <View style={styles.historySection}>
-                                <AppText variant="label" style={styles.historyTitle}>Your Past Sessions</AppText>
-                                <View style={[styles.historyList, { backgroundColor: colors.snow, borderColor: colors.borderLight }]}>
-                                    {sessions.map((s, idx) => (
-                                        <View key={s.session_id}>
-                                            {idx > 0 && <View style={[styles.historyDivider, { backgroundColor: colors.borderLight }]} />}
-                                            <TouchableOpacity
-                                                style={styles.historyItem}
-                                                activeOpacity={0.7}
-                                                onPress={() => restoreSession(s)}
-                                            >
-                                                <Ionicons name="chatbox-outline" size={20} color={colors.silver} style={{ marginRight: Spacing.md }} />
-                                                <View style={styles.historyItemBody}>
-                                                    <AppText variant="label" numberOfLines={1}>{s.title}</AppText>
-                                                    <AppText variant="caption" style={{ color: colors.silver }}>
-                                                        {s.messageCount} msgs • {new Date(s.createdAt).toLocaleDateString()}
-                                                    </AppText>
-                                                </View>
-                                                <TouchableOpacity
-                                                    onPress={() => removeSession(s.session_id)}
-                                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                                >
-                                                    <Ionicons name="close" size={16} color={colors.silver} />
-                                                </TouchableOpacity>
-                                            </TouchableOpacity>
+                                {[
+                                    { title: 'Normal Q&A', filter: (s: any) => !s.mode || s.mode === 'normal' },
+                                    { title: 'Teaching Sessions', filter: (s: any) => s.mode === 'teaching' },
+                                    { title: 'Guiding Sessions', filter: (s: any) => s.mode === 'guiding' },
+                                ].map((group) => {
+                                    const groupSessions = sessions.filter(group.filter);
+                                    if (groupSessions.length === 0) return null;
+                                    
+                                    return (
+                                        <View key={group.title} style={styles.historyGroup}>
+                                            <AppText variant="label" style={styles.historyTitle}>{group.title}</AppText>
+                                            <View style={[styles.historyList, { backgroundColor: colors.snow, borderColor: colors.borderLight }]}>
+                                                {groupSessions.map((s, idx) => (
+                                                    <View key={s.session_id}>
+                                                        {idx > 0 && <View style={[styles.historyDivider, { backgroundColor: colors.borderLight }]} />}
+                                                        <TouchableOpacity
+                                                            style={styles.historyItem}
+                                                            activeOpacity={0.7}
+                                                            onPress={() => restoreSession(s)}
+                                                        >
+                                                            <Ionicons name="chatbox-outline" size={20} color={colors.silver} style={{ marginRight: Spacing.md }} />
+                                                            <View style={styles.historyItemBody}>
+                                                                <AppText variant="label" numberOfLines={1}>{s.title}</AppText>
+                                                                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                                                                    <Ionicons name="chatbubbles-outline" size={14} color={colors.silver} style={{ marginRight: 4 }} />
+                                                                    <AppText variant="caption" style={{ color: colors.silver, marginRight: Spacing.md, fontWeight: '600' }}>
+                                                                        {s.messageCount}
+                                                                    </AppText>
+                                                                    <Ionicons name="calendar-outline" size={14} color={colors.silver} style={{ marginRight: 4 }} />
+                                                                    <AppText variant="caption" style={{ color: colors.silver, fontWeight: '600' }}>
+                                                                        {new Date(s.createdAt).toLocaleDateString()}
+                                                                    </AppText>
+                                                                </View>
+                                                            </View>
+                                                            <TouchableOpacity
+                                                                onPress={() => removeSession(s.session_id)}
+                                                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                                            >
+                                                                <Ionicons name="close" size={16} color={colors.silver} />
+                                                            </TouchableOpacity>
+                                                        </TouchableOpacity>
+                                                    </View>
+                                                ))}
+                                            </View>
                                         </View>
-                                    ))}
-                                </View>
+                                    );
+                                })}
                             </View>
                         )}
                     </WebContainer>
@@ -163,11 +185,8 @@ export default function TutorScreen() {
     // ─────────────────────────────────────────────────────────────────
     return (
         <View style={[styles.root, { backgroundColor: colors.light }]}>
-            <LinearGradient
-                colors={[Colors.darkBlue, Colors.hexawareBlue]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[styles.headerCompact, { paddingTop: Math.max(insets.top, 40), zIndex: 10, elevation: 10 }]}
+            <View
+                style={[styles.headerCompact, { backgroundColor: Colors.darkBlue, paddingTop: Math.max(insets.top, 16), zIndex: 10, elevation: 10 }]}
             >
                 <WebContainer>
                     <View style={styles.headerInner}>
@@ -175,44 +194,19 @@ export default function TutorScreen() {
                             <AppText style={styles.headerTopic} numberOfLines={1}>
                                 {activeSessionTitle || 'New Session'}
                             </AppText>
+                            <AppText style={styles.headerMode}>
+                                {chatMode === 'normal' ? 'Normal Q&A' : chatMode === 'teaching' ? 'Teaching Mode' : 'Guiding Mode'}
+                            </AppText>
                         </View>
                         <TouchableOpacity
                             onPress={clearActiveChat}
-                            style={[styles.newBtn, { backgroundColor: 'rgba(255,255,255,0.15)' }]}
+                            style={[styles.iconBtn, { backgroundColor: 'rgba(255,255,255,0.15)' }]}
                         >
-                            <AppText style={styles.newText}>Back</AppText>
+                            <Ionicons name="chevron-back" size={20} color={Colors.snow} />
                         </TouchableOpacity>
                     </View>
-                    
-                    {/* ── Mode Segmented Control ── */}
-                    <View style={[styles.modeContainer, { backgroundColor: 'rgba(0,0,0,0.15)' }]}>
-                        {MODES.map((mode) => {
-                            const isActive = chatMode === mode.value;
-                            return (
-                                <TouchableOpacity 
-                                    key={mode.value}
-                                    activeOpacity={0.8}
-                                    onPress={() => setChatMode(mode.value)}
-                                    style={[
-                                        styles.modeTapItem, 
-                                        isActive && [styles.modeTapItemActive, { backgroundColor: Colors.snow, ...Shadow.sm }]
-                                    ]}
-                                >
-                                    <Ionicons 
-                                        name={mode.icon} 
-                                        size={14} 
-                                        color={isActive ? Colors.hexawareBlue : Colors.silver} 
-                                        style={{ marginRight: 4 }} 
-                                    />
-                                    <AppText style={[styles.modeText, isActive && { color: Colors.hexawareBlue, fontWeight: '700' }]}>
-                                        {mode.label}
-                                    </AppText>
-                                </TouchableOpacity>
-                            )
-                        })}
-                    </View>
                 </WebContainer>
-            </LinearGradient>
+            </View>
 
             <KeyboardAvoidingView
                 style={styles.flex}
@@ -284,41 +278,33 @@ const styles = StyleSheet.create({
     headerCompact: { paddingBottom: Spacing.md },
     headerInner: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.sm,
+        paddingHorizontal: Spacing.lg, paddingTop: Spacing.xs, paddingBottom: Spacing.xs,
     },
     headerSuper: { fontSize: FontSize.xs, fontWeight: '600', color: Colors.canary, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
-    headerTitle: { fontSize: FontSize['2xl'], fontWeight: '800', color: Colors.snow },
+    headerTitle: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.snow },
 
     // ── Chat Header
     headerCenter: { flex: 1, marginRight: Spacing.md },
-    headerTopic: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.snow },
-    newBtn: { paddingHorizontal: Spacing.md, paddingVertical: 8, borderRadius: Radius.full },
-    newText: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.snow },
+    headerTopic: { fontSize: FontSize.md, fontWeight: '700', color: Colors.snow },
+    iconBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
     
-    // ── Mode Selector
-    modeContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginHorizontal: Spacing.lg,
-        padding: 4,
-        borderRadius: Radius.lg,
-        marginTop: Spacing.xs,
+    headerMode: { fontSize: FontSize.xs, color: Colors.snow, opacity: 0.8, marginTop: 2 },
+    
+    // ── Mode Selector (Active) -> Mode Cards (Empty State)
+    startModesContainer: {
+        width: '100%', maxWidth: 500, alignSelf: 'center', gap: Spacing.md,
     },
-    modeTapItem: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 8,
-        borderRadius: Radius.md,
+    startModeCard: {
+        flexDirection: 'row', alignItems: 'center', padding: Spacing.lg,
+        borderRadius: Radius.lg, borderWidth: 1,
     },
-    modeTapItemActive: {
+    startModeIcon: {
+        width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center',
+        marginRight: Spacing.md,
     },
-    modeText: {
-        fontSize: FontSize.xs,
-        fontWeight: '600',
-        color: Colors.silver,
-    },
+    startModeBody: { flex: 1 },
+    startModeTitle: { fontSize: FontSize.md, fontWeight: '700', marginBottom: 2 },
+    startModeDesc: { fontSize: FontSize.xs, color: Colors.silver },
 
     // ── Empty State
     emptyScrollContent: { paddingHorizontal: Spacing.lg, paddingVertical: Spacing['3xl'] },
@@ -343,6 +329,7 @@ const styles = StyleSheet.create({
 
     // ── Topic History List
     historySection: { alignSelf: 'center', width: '100%', maxWidth: 500 },
+    historyGroup: { marginBottom: Spacing.xl },
     historyTitle: { marginBottom: Spacing.sm, fontSize: FontSize.sm, textTransform: 'uppercase', letterSpacing: 1 },
     historyList: { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden' },
     historyDivider: { height: 1 },

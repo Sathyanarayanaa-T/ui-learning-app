@@ -28,11 +28,8 @@ export default function OnboardingScreen() {
     return (
         <View style={[styles.root, { backgroundColor: colors.light }]}>
             {/* ── Hero gradient ───────────────────────────── */}
-            <LinearGradient
-                colors={[Colors.darkBlue, Colors.hexawareBlue]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[styles.hero, { paddingTop: Math.max(insets.top, 40) }]}
+            <View
+                style={[styles.hero, { backgroundColor: Colors.darkBlue, paddingTop: Math.max(insets.top, 24) }]}
             >
                 <WebContainer>
                     <View style={[styles.heroContent, { zIndex: 10, elevation: 10 }]}>
@@ -87,7 +84,7 @@ export default function OnboardingScreen() {
                         </View>
                     </View>
                 </WebContainer>
-            </LinearGradient>
+            </View>
 
             {/* ── Form panel ──────────────────────────────── */}
             <KeyboardAvoidingView

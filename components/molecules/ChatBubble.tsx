@@ -3,56 +3,16 @@ import { View, StyleSheet, Text } from 'react-native';
 import { useColors } from '../../hooks/useColors';
 import { FontSize, FontWeight, Radius, Spacing } from '../../constants/theme';
 import type { ChatMessage } from '../../types/tutor';
+import Markdown from 'react-native-markdown-display';
 
 interface ChatBubbleProps {
     message: ChatMessage;
-}
-
-// ── Simple inline code-block parser ─────────────────────────
-// Splits text into plain segments and ```...``` code blocks.
-type Segment = { type: 'text' | 'code'; content: string };
-
-function parseContent(text: string): Segment[] {
-    const segments: Segment[] = [];
-    const codeBlockReg = /```[\s\S]*?```/g;
-    let lastIndex = 0;
-    let match: RegExpExecArray | null;
-
-    while ((match = codeBlockReg.exec(text)) !== null) {
-        if (match.index > lastIndex) {
-            segments.push({ type: 'text', content: text.slice(lastIndex, match.index) });
-        }
-        const raw = match[0].replace(/^```[^\n]*\n?/, '').replace(/```$/, '');
-        segments.push({ type: 'code', content: raw });
-        lastIndex = match.index + match[0].length;
-    }
-    if (lastIndex < text.length) {
-        segments.push({ type: 'text', content: text.slice(lastIndex) });
-    }
-    return segments;
-}
-
-// ── Inline bold (**text**) renderer ──────────────────────────
-function BoldText({ text, color }: { text: string; color: string }) {
-    const parts = text.split(/(\*\*[^*]+\*\*)/g);
-    return (
-        <Text>
-            {parts.map((p, i) =>
-                p.startsWith('**') && p.endsWith('**') ? (
-                    <Text key={i} style={{ fontWeight: '700', color }}>{p.slice(2, -2)}</Text>
-                ) : (
-                    <Text key={i} style={{ color }}>{p}</Text>
-                )
-            )}
-        </Text>
-    );
 }
 
 // ── Chat Bubble ──────────────────────────────────────────────
 export const ChatBubble: React.FC<ChatBubbleProps> = ({ message }) => {
     const colors = useColors();
     const isUser = message.role === 'user';
-    const segments = parseContent(message.text);
 
     return (
         <View style={[styles.row, isUser ? styles.rowUser : styles.rowAI]}>
@@ -70,19 +30,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message }) => {
                     ? [styles.bubbleUser, { backgroundColor: colors.hexawareBlue }]
                     : [styles.bubbleAI, { backgroundColor: colors.snow, borderColor: colors.borderLight }],
             ]}>
-                {segments.map((seg, i) =>
-                    seg.type === 'code' ? (
-                        <View key={i} style={styles.codeBlock}>
-                            <Text style={styles.codeText}>{seg.content.trim()}</Text>
-                        </View>
-                    ) : (
-                        <BoldText
-                            key={i}
-                            text={seg.content}
-                            color={isUser ? '#FFFFFF' : colors.black}
-                        />
-                    )
-                )}
+                <Markdown style={isUser ? markdownStyleUser : markdownStyleAI(colors.black)}>
+                    {message.text}
+                </Markdown>
 
                 {message.timestamp ? (
                     <Text style={[styles.timestamp, { color: isUser ? '#FFFFFF88' : colors.silver }]}>
@@ -120,4 +70,24 @@ const styles = StyleSheet.create({
         lineHeight: 20,
     },
     timestamp: { fontSize: 10, marginTop: Spacing.xs, textAlign: 'right' },
+});
+
+const markdownStyleUser = StyleSheet.create({
+    body: { color: '#FFFFFF', fontSize: FontSize.sm, lineHeight: 22 },
+    code_block: { backgroundColor: '#0A0A1A', borderRadius: 8, padding: Spacing.md, marginTop: Spacing.xs, marginBottom: Spacing.xs },
+    code_inline: { backgroundColor: '#0A0A1A', color: '#14CBDE', paddingHorizontal: 4, borderRadius: 4, fontFamily: 'monospace' },
+    fence: { backgroundColor: '#0A0A1A', color: '#14CBDE', borderRadius: 8, padding: Spacing.md, fontFamily: 'monospace', fontSize: FontSize.xs },
+    strong: { fontWeight: '700', color: '#FFFFFF' },
+    link: { color: '#14CBDE', textDecorationLine: 'underline' },
+    paragraph: { marginTop: 0, marginBottom: Spacing.xs },
+});
+
+const markdownStyleAI = (textColor: string) => StyleSheet.create({
+    body: { color: textColor, fontSize: FontSize.sm, lineHeight: 22 },
+    code_block: { backgroundColor: '#0A0A1A', borderRadius: 8, padding: Spacing.md, marginTop: Spacing.xs, marginBottom: Spacing.xs },
+    code_inline: { backgroundColor: '#0A0A1A', color: '#14CBDE', paddingHorizontal: 4, borderRadius: 4, fontFamily: 'monospace' },
+    fence: { backgroundColor: '#0A0A1A', color: '#14CBDE', borderRadius: 8, padding: Spacing.md, fontFamily: 'monospace', fontSize: FontSize.xs },
+    strong: { fontWeight: '700', color: textColor },
+    link: { color: '#3C2CDA', textDecorationLine: 'underline' },
+    paragraph: { marginTop: 0, marginBottom: Spacing.xs },
 });

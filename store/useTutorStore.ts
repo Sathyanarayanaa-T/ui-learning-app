@@ -45,7 +45,7 @@ interface TutorState {
     setChatMode: (mode: ChatMode) => void;
     
     isStarting: boolean;
-    startNewSession: () => Promise<void>;
+    startNewSession: (mode: ChatMode) => Promise<void>;
     
     isRestoring: boolean;
     restoreSession: (session: LocalSession) => Promise<void>;
@@ -95,18 +95,35 @@ export const useTutorStore = create<TutorState>((set, get) => ({
 
     isStarting: false,
 
-    startNewSession: async () => {
+    startNewSession: async (mode) => {
         set({ isStarting: true });
         try {
             const res = await createSession();
+            const pretextText = 
+                mode === 'teaching' 
+                    ? "Welcome to **Teaching Mode**! I'll break down complex concepts step-by-step and help you build a deep understanding. What topic would you like to learn about?" 
+                    : mode === 'guiding' 
+                    ? "Hi! You are in **Guiding Mode**. I will use Socratic questioning to help you find the answers yourself. I'll provide hints and ask thought-provoking questions to guide your learning journey. What problem are you trying to solve?" 
+                    : "Hello! I am your AI Tutor in **Normal Q&A** mode. I'm here to provide direct, clear answers and explanations to your questions. How can I help you today?";
+
+            const introMsg: ChatMessage = {
+                id: mkId(),
+                role: 'assistant',
+                text: pretextText,
+                timestamp: new Date().toISOString(),
+            };
+
             set({
                 activeSessionId: res.session_id,
                 activeSessionTitle: '', // Will be set on first message
                 activeDocumentId: null,
                 activeDocumentName: null,
-                messages: [],
+                chatMode: mode,
+                messages: [introMsg],
                 isStarting: false,
             });
+            
+            await persistSessionCache(res.session_id, [introMsg]);
             // We don't add to sessions list until the first message is sent, 
             // to avoid cluttering history with completely empty sessions.
         } catch (error) {
@@ -124,6 +141,7 @@ export const useTutorStore = create<TutorState>((set, get) => ({
             activeSessionTitle: session.title,
             activeDocumentId: null,
             activeDocumentName: null,
+            chatMode: session.mode || 'normal',
             messages: []
         });
 
@@ -219,6 +237,7 @@ export const useTutorStore = create<TutorState>((set, get) => ({
                 title: newTitle,
                 createdAt: new Date().toISOString(),
                 messageCount: 1,
+                mode: chatMode,
             });
         } else {
             updatedSessions = updatedSessions.map(s => 
