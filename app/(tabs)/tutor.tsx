@@ -82,8 +82,8 @@ export default function TutorScreen() {
                     <WebContainer>
                         <View style={styles.headerInner}>
                             <View>
-                                <AppText style={styles.headerSuper}>Powered by React & AI</AppText>
-                                <AppText style={styles.headerTitle}>AI Tutor</AppText>
+                                <AppText style={styles.headerSuper}>Intelligence at your pace</AppText>
+                                <AppText style={styles.headerTitle}>Erudia</AppText>
                             </View>
                         </View>
                     </WebContainer>
@@ -242,7 +242,7 @@ export default function TutorScreen() {
                                 <TextInput
                                     value={input}
                                     onChangeText={setInput}
-                                    placeholder="Message AI Tutor..."
+                                    placeholder="Message Erudia..."
                                     placeholderTextColor={colors.silver}
                                     style={[styles.chatInput, { backgroundColor: colors.white, borderColor: colors.borderLight, color: colors.black }]}
                                     multiline

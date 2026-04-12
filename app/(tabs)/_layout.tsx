@@ -11,7 +11,7 @@ import { Colors, Shadow, FontSize, FontWeight } from '../../constants/theme';
 
 
 const TABS: Record<string, { icon: keyof typeof Ionicons.glyphMap; label: string }> = {
-    tutor: { icon: 'chatbubbles-outline', label: 'AI Tutor' },
+    tutor: { icon: 'chatbubbles-outline', label: 'Erudia' },
 };
 
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
