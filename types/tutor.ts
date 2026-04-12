@@ -79,6 +79,7 @@ export interface ChatMessage {
     text: string;
     timestamp: string;
     tokensUsed?: number;
+    feedback?: 'like' | 'dislike';
 }
 
 export interface LocalSession {

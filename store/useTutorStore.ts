@@ -61,6 +61,10 @@ interface TutorState {
     messages: ChatMessage[];
     isTyping: boolean;
     sendMessage: (text: string) => Promise<void>;
+
+    // ── Message Actions ──────────────────────────────────────
+    setFeedback: (messageId: string, feedback: 'like' | 'dislike' | undefined) => void;
+    regenerateMessage: (messageId: string) => Promise<void>;
 }
 
 // ─── Store Implementation ──────────────────────────────────────
@@ -295,6 +299,94 @@ export const useTutorStore = create<TutorState>((set, get) => ({
                     id: mkId(),
                     role: 'assistant',
                     text: '⚠️ The AI encountered an error processing your request. Please try again.',
+                    timestamp: new Date().toISOString(),
+                };
+                return { messages: [...s.messages, errorMsg], isTyping: false };
+            });
+        }
+    },
+
+    // ── Message Actions
+    setFeedback: (messageId, feedback) => {
+        const { activeSessionId } = get();
+        set((s) => {
+            const msgs = s.messages.map(m => m.id === messageId ? { ...m, feedback } : m);
+            if (activeSessionId) persistSessionCache(activeSessionId, msgs);
+            return { messages: msgs };
+        });
+    },
+
+    regenerateMessage: async (messageId) => {
+        const { activeSessionId, chatMode, activeDocumentId, messages } = get();
+        if (!activeSessionId) return;
+
+        const targetIndex = messages.findIndex(m => m.id === messageId);
+        if (targetIndex === -1) return;
+
+        let userText = '';
+        for (let i = targetIndex - 1; i >= 0; i--) {
+            if (messages[i].role === 'user') {
+                userText = messages[i].text;
+                break;
+            }
+        }
+        if (!userText) return;
+
+        set({ isTyping: true });
+
+        // Remove the AI message we are regenerating if it's the last one
+        if (targetIndex === messages.length - 1) {
+            set((s) => ({ messages: s.messages.slice(0, -1) }));
+        }
+
+        try {
+            let replyText = '';
+            let tokensUsed = 0;
+            let respTimestamp = new Date().toISOString();
+
+            if (activeDocumentId) {
+                const apiRes = await askDocumentQuestion({
+                    session_id: activeSessionId,
+                    document_id: activeDocumentId,
+                    question: userText,
+                    mode: chatMode
+                });
+                replyText = apiRes.answer;
+                respTimestamp = apiRes.timestamp;
+            } else {
+                const apiRes = await sendChat({
+                    session_id: activeSessionId,
+                    message: userText,
+                    mode: chatMode
+                });
+                replyText = apiRes.ai_response;
+                tokensUsed = apiRes.tokens_used;
+                respTimestamp = apiRes.timestamp;
+            }
+
+            const aiMsg: ChatMessage = {
+                id: mkId(),
+                role: 'assistant',
+                text: replyText,
+                timestamp: respTimestamp,
+                tokensUsed,
+            };
+
+            set((s) => {
+                // Determine insertion index based on whether we removed the last message or not
+                const currentMessages = s.messages;
+                // If the target message is still there (meaning it wasn't the last message), we just append.
+                const finalMessages = [...currentMessages, aiMsg];
+                persistSessionCache(activeSessionId, finalMessages);
+                return { messages: finalMessages, isTyping: false };
+            });
+            
+        } catch (error) {
+            set((s) => {
+                const errorMsg: ChatMessage = {
+                    id: mkId(),
+                    role: 'assistant',
+                    text: '⚠️ failed to regenerate response. Please try again.',
                     timestamp: new Date().toISOString(),
                 };
                 return { messages: [...s.messages, errorMsg], isTyping: false };
