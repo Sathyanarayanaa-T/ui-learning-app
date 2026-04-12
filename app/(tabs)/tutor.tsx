@@ -13,13 +13,15 @@ import { WebContainer } from '../../components/layout/WebContainer';
 import * as DocumentPicker from 'expo-document-picker';
 import { Colors, Spacing, Radius, FontSize, FontWeight, Shadow } from '../../constants/theme';
 import { useTutorStore } from '../../store/useTutorStore';
+import { useAppStore } from '../../store/useAppStore';
 import { useColors } from '../../hooks/useColors';
 import type { ChatMessage, ChatMode } from '../../types/tutor';
+import { useRouter } from 'expo-router';
 
-const MODES: { value: ChatMode, label: string, icon: keyof typeof Ionicons.glyphMap }[] = [
-    { value: 'normal', label: 'Normal QA', icon: 'chatbox-ellipses-outline' },
-    { value: 'teaching', label: 'Teaching', icon: 'school-outline' },
-    { value: 'guiding', label: 'Guiding', icon: 'compass-outline' }
+const MODES: { value: ChatMode, label: string, subtitle: string, icon: keyof typeof Ionicons.glyphMap }[] = [
+    { value: 'normal', label: 'Resolve', subtitle: 'Normal QA: Direct Q&A answers and explanations', icon: 'chatbubbles-outline' },
+    { value: 'teaching', label: 'Mastery', subtitle: 'Teaching: Detailed conceptual breakdowns', icon: 'school-outline' },
+    { value: 'guiding', label: 'Navigate', subtitle: 'Guiding: Socratic hints and guided learning', icon: 'compass-outline' }
 ];
 
 export default function TutorScreen() {
@@ -32,10 +34,34 @@ export default function TutorScreen() {
     } = useTutorStore();
     
     const colors = useColors();
+    const { isDark, toggleTheme } = useAppStore();
     const insets = useSafeAreaInsets();
+    const router = useRouter();
 
     const [input, setInput] = useState('');
     const listRef = useRef<FlatList<ChatMessage>>(null);
+
+    const [activeFilter, setActiveFilter] = useState<string>('All');
+    
+    // FILTERS and mappings
+    const FILTERS = ['All', 'Resolve', 'Mastery', 'Navigate'];
+    const MODE_MAPPING: Record<string, string> = {
+        'Resolve': 'normal',
+        'Mastery': 'teaching',
+        'Navigate': 'guiding'
+    };
+    
+    const ICON_MAPPING: Record<string, keyof typeof Ionicons.glyphMap> = {
+        'normal': 'chatbubbles-outline',
+        'teaching': 'school-outline',
+        'guiding': 'compass-outline'
+    };
+
+    const filteredSessions = sessions.filter(s => {
+        if (activeFilter === 'All') return true;
+        const targetMode = MODE_MAPPING[activeFilter];
+        return (s.mode || 'normal') === targetMode;
+    });
 
     useEffect(() => {
         loadSessions();
@@ -73,108 +99,132 @@ export default function TutorScreen() {
     // EMPTY STATE / "HOME" VIEW
     // "Start New Chat" + List of history
     // ─────────────────────────────────────────────────────────────────
+
+    const renderHeader = () => (
+        <View style={{ width: '100%', maxWidth: 500, alignSelf: 'center' }}>
+            <View style={styles.centeredInputSection}>
+                <Ionicons name="hardware-chip" size={52} color={Colors.canary} style={{ marginBottom: Spacing.md }} />
+                <AppText variant="title" style={[styles.emptyTitle, { color: isDark ? Colors.snow : Colors.darkBlue }]}>Ready to start learning?</AppText>
+                <View style={styles.startModesContainer}>
+                    {MODES.map((mode) => (
+                        <TouchableOpacity
+                            key={mode.value}
+                            onPress={() => startNewSession(mode.value)}
+                            disabled={isStarting}
+                            activeOpacity={0.8}
+                            style={[styles.startModeCard, Shadow.sm, { backgroundColor: colors.snow, paddingVertical: Spacing.md, paddingHorizontal: Spacing.lg }]}
+                        >
+                            <View style={[styles.startModeIcon, { backgroundColor: isDark ? 'rgba(168, 85, 247, 0.2)' : '#F3E8FF' }]}>
+                                <Ionicons name={mode.icon} size={24} color={isDark ? '#D8B4FE' : '#581C87'} />
+                            </View>
+                            <View style={styles.startModeBody}>
+                                <AppText style={[styles.startModeTitle, { color: colors.black }]}>{mode.label}</AppText>
+                                <AppText style={[styles.startModeDesc, { color: colors.silver }]} numberOfLines={2}>
+                                    {mode.subtitle}
+                                </AppText>
+                            </View>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+            </View>
+
+            <View style={styles.historyHeader}>
+                <AppText style={[styles.historyHeaderText, { color: isDark ? Colors.snow : Colors.darkBlue }]}>RECENT ACTIVITY</AppText>
+            </View>
+            
+            <View style={styles.filterContainer}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+                    {FILTERS.map(filter => {
+                        const isActive = activeFilter === filter;
+                        return (
+                            <TouchableOpacity
+                                key={filter}
+                                onPress={() => setActiveFilter(filter)}
+                                style={[
+                                    styles.filterChip,
+                                    { backgroundColor: isActive ? (isDark ? Colors.silver : Colors.darkBlue) : colors.borderLight }
+                                ]}
+                            >
+                                <AppText style={[styles.filterChipText, { color: isActive ? (isDark ? Colors.darkBlue : Colors.snow) : colors.black }]}>
+                                    {filter}
+                                </AppText>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </ScrollView>
+            </View>
+        </View>
+    );
+
+    const renderItem = ({ item }: { item: any }) => {
+        const mode = item.mode || 'normal';
+        const iconName = ICON_MAPPING[mode] || 'chatbubbles-outline';
+        
+        return (
+            <TouchableOpacity 
+                activeOpacity={0.8}
+                onPress={() => restoreSession(item)}
+                style={[styles.historyItemCard, { backgroundColor: colors.snow, borderColor: colors.borderLight }]}
+            >
+                <View style={styles.historyItemBody}>
+                    <AppText variant="label" style={[styles.historyCardTitle, { color: colors.black }]} numberOfLines={1}>{item.title}</AppText>
+                    <View style={styles.subtitleRow}>
+                        <Ionicons name={iconName} size={14} color={colors.silver} style={styles.subtitleIcon} />
+                        
+                        <Ionicons name="chatbubble-ellipses-outline" size={14} color={colors.silver} style={[styles.subtitleIcon, { marginLeft: Spacing.sm }]} />
+                        <AppText variant="caption" style={styles.subtitleText}>{item.messageCount || 0}</AppText>
+                        
+                        <Ionicons name="calendar-outline" size={14} color={colors.silver} style={[styles.subtitleIcon, { marginLeft: Spacing.sm }]} />
+                        <AppText variant="caption" style={styles.subtitleText}>{new Date(item.createdAt).toLocaleDateString()}</AppText>
+                    </View>
+                </View>
+                <TouchableOpacity
+                    onPress={() => removeSession(item.session_id)}
+                    style={styles.deleteBtn}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                    <Ionicons name="close" size={20} color={colors.silver} />
+                </TouchableOpacity>
+            </TouchableOpacity>
+        );
+    };
+
     if (!isChatActive) {
         return (
             <View style={[styles.root, { backgroundColor: colors.light }]}>
-                <View
-                    style={[styles.header, { backgroundColor: Colors.darkBlue, paddingTop: Math.max(insets.top, 16), zIndex: 10, elevation: 10 }]}
-                >
+                {/* ── Header ── */}
+                <SafeAreaView edges={['top']} style={{ backgroundColor: Colors.darkBlue, zIndex: 10, elevation: 10 }}>
                     <WebContainer>
-                        <View style={styles.headerInner}>
+                        <View style={[styles.headerInner, { paddingTop: Spacing.md, paddingBottom: Spacing.lg }]}>
                             <View>
-                                <AppText style={styles.headerSuper}>Intelligence at your pace</AppText>
+                                <AppText style={styles.headerSuper}>INTELLIGENCE AT YOUR PACE</AppText>
                                 <AppText style={styles.headerTitle}>Erudia</AppText>
                             </View>
+                            <TouchableOpacity
+                                onPress={toggleTheme}
+                                activeOpacity={0.8}
+                                style={[styles.iconBtn, { backgroundColor: 'rgba(255,255,255,0.15)' }]}
+                            >
+                                <Ionicons name={isDark ? 'sunny-outline' : 'moon-outline'} size={20} color={Colors.snow} />
+                            </TouchableOpacity>
                         </View>
                     </WebContainer>
-                </View>
+                </SafeAreaView>
 
-                <ScrollView
-                    contentContainerStyle={styles.emptyScrollContent}
+                {/* ── Main Unified View ── */}
+                <FlatList
+                    data={filteredSessions}
+                    keyExtractor={item => item.session_id}
+                    renderItem={renderItem}
+                    ListHeaderComponent={renderHeader}
+                    contentContainerStyle={styles.unifiedScrollContent}
                     showsVerticalScrollIndicator={false}
-                >
-                    <WebContainer>
-                        {/* ── Start Chat CTA ── */}
-                        <View style={styles.centeredInputSection}>
-                            <Ionicons name="hardware-chip" size={52} color={Colors.canary} style={{ marginBottom: Spacing.md }} />
-                            <AppText variant="title" style={styles.emptyTitle}>Ready to start learning?</AppText>
-                            <View style={styles.startModesContainer}>
-                                {MODES.map((mode) => (
-                                    <TouchableOpacity
-                                        key={mode.value}
-                                        onPress={() => startNewSession(mode.value)}
-                                        disabled={isStarting}
-                                        activeOpacity={0.8}
-                                        style={[styles.startModeCard, Shadow.sm, { backgroundColor: colors.snow, borderColor: colors.borderLight }]}
-                                    >
-                                        <View style={[styles.startModeIcon, { backgroundColor: colors.hexawareBlue + '15' }]}>
-                                            <Ionicons name={mode.icon} size={24} color={colors.hexawareBlue} />
-                                        </View>
-                                        <View style={styles.startModeBody}>
-                                            <AppText style={styles.startModeTitle}>{mode.label}</AppText>
-                                            <AppText style={styles.startModeDesc} numberOfLines={2}>
-                                                {mode.value === 'normal' ? 'Direct Q&A answers and explanations' : mode.value === 'teaching' ? 'Detailed conceptual breakdowns' : 'Socratic hints and guided learning'}
-                                            </AppText>
-                                        </View>
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
+                    ListEmptyComponent={() => (
+                        <View style={{ alignItems: 'center', marginTop: Spacing.xl }}>
+                            <AppText style={{ color: colors.silver }}>No activity found.</AppText>
                         </View>
-
-                        {/* ── Session History ── */}
-                        {sessions.length > 0 && (
-                            <View style={styles.historySection}>
-                                {[
-                                    { title: 'Normal Q&A', filter: (s: any) => !s.mode || s.mode === 'normal' },
-                                    { title: 'Teaching Sessions', filter: (s: any) => s.mode === 'teaching' },
-                                    { title: 'Guiding Sessions', filter: (s: any) => s.mode === 'guiding' },
-                                ].map((group) => {
-                                    const groupSessions = sessions.filter(group.filter);
-                                    if (groupSessions.length === 0) return null;
-                                    
-                                    return (
-                                        <View key={group.title} style={styles.historyGroup}>
-                                            <AppText variant="label" style={styles.historyTitle}>{group.title}</AppText>
-                                            <View style={[styles.historyList, { backgroundColor: colors.snow, borderColor: colors.borderLight }]}>
-                                                {groupSessions.map((s, idx) => (
-                                                    <View key={s.session_id}>
-                                                        {idx > 0 && <View style={[styles.historyDivider, { backgroundColor: colors.borderLight }]} />}
-                                                        <TouchableOpacity
-                                                            style={styles.historyItem}
-                                                            activeOpacity={0.7}
-                                                            onPress={() => restoreSession(s)}
-                                                        >
-                                                            <Ionicons name="chatbox-outline" size={20} color={colors.silver} style={{ marginRight: Spacing.md }} />
-                                                            <View style={styles.historyItemBody}>
-                                                                <AppText variant="label" numberOfLines={1}>{s.title}</AppText>
-                                                                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                                                                    <Ionicons name="chatbubbles-outline" size={14} color={colors.silver} style={{ marginRight: 4 }} />
-                                                                    <AppText variant="caption" style={{ color: colors.silver, marginRight: Spacing.md, fontWeight: '600' }}>
-                                                                        {s.messageCount}
-                                                                    </AppText>
-                                                                    <Ionicons name="calendar-outline" size={14} color={colors.silver} style={{ marginRight: 4 }} />
-                                                                    <AppText variant="caption" style={{ color: colors.silver, fontWeight: '600' }}>
-                                                                        {new Date(s.createdAt).toLocaleDateString()}
-                                                                    </AppText>
-                                                                </View>
-                                                            </View>
-                                                            <TouchableOpacity
-                                                                onPress={() => removeSession(s.session_id)}
-                                                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                                            >
-                                                                <Ionicons name="close" size={16} color={colors.silver} />
-                                                            </TouchableOpacity>
-                                                        </TouchableOpacity>
-                                                    </View>
-                                                ))}
-                                            </View>
-                                        </View>
-                                    );
-                                })}
-                            </View>
-                        )}
-                    </WebContainer>
-                </ScrollView>
+                    )}
+                />
             </View>
         );
     }
@@ -306,35 +356,26 @@ const styles = StyleSheet.create({
     startModeTitle: { fontSize: FontSize.md, fontWeight: '700', marginBottom: 2 },
     startModeDesc: { fontSize: FontSize.xs, color: Colors.silver },
 
-    // ── Empty State
-    emptyScrollContent: { paddingHorizontal: Spacing.lg, paddingVertical: Spacing['3xl'] },
-    centeredInputSection: { alignItems: 'center', marginBottom: Spacing['3xl'], marginTop: Spacing.xl },
+    // ── Unified State
+    unifiedScrollContent: { paddingBottom: Spacing['3xl'], paddingTop: Spacing.md },
+    centeredInputSection: { alignItems: 'center', marginBottom: Spacing.xl, marginTop: Spacing.sm },
     emptyTitle: { fontSize: FontSize['2xl'], fontWeight: '800', marginBottom: Spacing.lg, textAlign: 'center' },
     
-    startBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: Spacing.xl,
-        paddingVertical: Spacing.md,
-        borderRadius: Radius.full,
-        columnGap: Spacing.sm,
-        minWidth: 220,
-    },
-    startBtnText: {
-        color: Colors.snow,
-        fontSize: FontSize.md,
-        fontWeight: '700',
-    },
+    // ── History & Filters
+    historyHeader: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.sm, width: '100%', maxWidth: 500, alignSelf: 'center' },
+    historyHeaderText: { fontSize: FontSize.sm, fontWeight: 'bold', letterSpacing: 1.2, textTransform: 'uppercase' },
+    filterContainer: { paddingBottom: Spacing.md, width: '100%', maxWidth: 500, alignSelf: 'center' },
+    filterScroll: { paddingHorizontal: Spacing.lg, gap: Spacing.sm },
+    filterChip: { paddingHorizontal: Spacing.md, paddingVertical: 8, borderRadius: 20, height: 36, alignItems: 'center', justifyContent: 'center' },
+    filterChipText: { fontSize: FontSize.sm, fontWeight: '600' },
 
-    // ── Topic History List
-    historySection: { alignSelf: 'center', width: '100%', maxWidth: 500 },
-    historyGroup: { marginBottom: Spacing.xl },
-    historyTitle: { marginBottom: Spacing.sm, fontSize: FontSize.sm, textTransform: 'uppercase', letterSpacing: 1 },
-    historyList: { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden' },
-    historyDivider: { height: 1 },
-    historyItem: { flexDirection: 'row', alignItems: 'center', padding: Spacing.lg },
+    historyItemCard: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.md, paddingLeft: Spacing.lg, paddingRight: Math.max(12, Spacing.lg), borderRadius: Radius.lg, borderWidth: 1, ...Shadow.sm, marginHorizontal: Spacing.lg, marginBottom: Spacing.md, width: '100%', maxWidth: 500 - (Spacing.lg * 2), alignSelf: 'center' },
     historyItemBody: { flex: 1 },
+    historyCardTitle: { fontSize: FontSize.md, fontWeight: 'bold', marginBottom: 6 },
+    subtitleRow: { flexDirection: 'row', alignItems: 'center' },
+    subtitleIcon: { marginRight: 4 },
+    subtitleText: { fontWeight: '600', fontSize: FontSize.xs, color: Colors.silver },
+    deleteBtn: { paddingLeft: Spacing.md },
 
     // ── Chat View
     listContent: { paddingTop: Spacing.lg, paddingBottom: Spacing.md },
