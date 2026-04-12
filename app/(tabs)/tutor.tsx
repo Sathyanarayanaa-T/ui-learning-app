@@ -161,31 +161,33 @@ export default function TutorScreen() {
         const iconName = ICON_MAPPING[mode] || 'chatbubbles-outline';
         
         return (
-            <TouchableOpacity 
-                activeOpacity={0.8}
-                onPress={() => restoreSession(item)}
-                style={[styles.historyItemCard, { backgroundColor: colors.snow, borderColor: colors.borderLight }]}
-            >
-                <View style={styles.historyItemBody}>
-                    <AppText variant="label" style={[styles.historyCardTitle, { color: colors.black }]} numberOfLines={1}>{item.title}</AppText>
-                    <View style={styles.subtitleRow}>
-                        <Ionicons name={iconName} size={14} color={colors.silver} style={styles.subtitleIcon} />
-                        
-                        <Ionicons name="chatbubble-ellipses-outline" size={14} color={colors.silver} style={[styles.subtitleIcon, { marginLeft: Spacing.sm }]} />
-                        <AppText variant="caption" style={styles.subtitleText}>{item.messageCount || 0}</AppText>
-                        
-                        <Ionicons name="calendar-outline" size={14} color={colors.silver} style={[styles.subtitleIcon, { marginLeft: Spacing.sm }]} />
-                        <AppText variant="caption" style={styles.subtitleText}>{new Date(item.createdAt).toLocaleDateString()}</AppText>
-                    </View>
-                </View>
-                <TouchableOpacity
-                    onPress={() => removeSession(item.session_id)}
-                    style={styles.deleteBtn}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            <View style={styles.historyItemWrapper}>
+                <TouchableOpacity 
+                    activeOpacity={0.8}
+                    onPress={() => restoreSession(item)}
+                    style={[styles.historyItemCard, { backgroundColor: colors.snow, borderColor: colors.borderLight }]}
                 >
-                    <Ionicons name="close" size={20} color={colors.silver} />
+                    <View style={styles.historyItemBody}>
+                        <AppText variant="label" style={[styles.historyCardTitle, { color: colors.black }]} numberOfLines={1}>{item.title}</AppText>
+                        <View style={styles.subtitleRow}>
+                            <Ionicons name={iconName} size={14} color={colors.silver} style={styles.subtitleIcon} />
+                            
+                            <Ionicons name="chatbubble-ellipses-outline" size={14} color={colors.silver} style={[styles.subtitleIcon, { marginLeft: Spacing.sm }]} />
+                            <AppText variant="caption" style={styles.subtitleText}>{item.messageCount || 0}</AppText>
+                            
+                            <Ionicons name="calendar-outline" size={14} color={colors.silver} style={[styles.subtitleIcon, { marginLeft: Spacing.sm }]} />
+                            <AppText variant="caption" style={styles.subtitleText}>{new Date(item.createdAt).toLocaleDateString()}</AppText>
+                        </View>
+                    </View>
+                    <TouchableOpacity
+                        onPress={() => removeSession(item.session_id)}
+                        style={styles.deleteBtn}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                        <Ionicons name="close" size={20} color={colors.silver} />
+                    </TouchableOpacity>
                 </TouchableOpacity>
-            </TouchableOpacity>
+            </View>
         );
     };
 
@@ -343,6 +345,7 @@ const styles = StyleSheet.create({
     // ── Mode Selector (Active) -> Mode Cards (Empty State)
     startModesContainer: {
         width: '100%', maxWidth: 500, alignSelf: 'center', gap: Spacing.md,
+        paddingHorizontal: Spacing.lg,
     },
     startModeCard: {
         flexDirection: 'row', alignItems: 'center', padding: Spacing.lg,
@@ -369,7 +372,8 @@ const styles = StyleSheet.create({
     filterChip: { paddingHorizontal: Spacing.md, paddingVertical: 8, borderRadius: 20, height: 36, alignItems: 'center', justifyContent: 'center' },
     filterChipText: { fontSize: FontSize.sm, fontWeight: '600' },
 
-    historyItemCard: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.md, paddingLeft: Spacing.lg, paddingRight: Math.max(12, Spacing.lg), borderRadius: Radius.lg, borderWidth: 1, ...Shadow.sm, marginHorizontal: Spacing.lg, marginBottom: Spacing.md, width: '100%', maxWidth: 500 - (Spacing.lg * 2), alignSelf: 'center' },
+    historyItemWrapper: { width: '100%', maxWidth: 500, alignSelf: 'center', paddingHorizontal: Spacing.lg, marginBottom: Spacing.md },
+    historyItemCard: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.md, paddingLeft: Spacing.lg, paddingRight: Math.max(12, Spacing.lg), borderRadius: Radius.lg, borderWidth: 1, ...Shadow.sm },
     historyItemBody: { flex: 1 },
     historyCardTitle: { fontSize: FontSize.md, fontWeight: 'bold', marginBottom: 6 },
     subtitleRow: { flexDirection: 'row', alignItems: 'center' },
