@@ -6,6 +6,7 @@ import type {
     ChatRequest, ChatResponse,
     SessionCreateResponse, ChatHistoryResponse,
     DocumentUploadResponse, DocumentQuestionRequest, DocumentQuestionResponse,
+    ChatFeedbackResponse, RegeneratedChatResponse,
 } from '../types/tutor';
 
 // Configure base URL based on platform for local development
@@ -71,6 +72,50 @@ export async function askDocumentQuestion(req: DocumentQuestionRequest): Promise
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(req),
+    });
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    return res.json();
+}
+
+// ─── POST /ai/chat/{chat_id}/feedback ───────────────────────
+export async function submitChatFeedback(
+    chatId: string,
+    sessionId: string,
+    isLiked: boolean | null,
+    feedbackText?: string,
+    improvementSuggestions?: string[]
+): Promise<ChatFeedbackResponse> {
+    const res = await fetch(`${API_BASE_URL}/ai/chat/${chatId}/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            chat_id: chatId,
+            session_id: sessionId,
+            is_liked: isLiked,
+            feedback_text: feedbackText,
+            improvement_suggestions: improvementSuggestions || [],
+        }),
+    });
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    return res.json();
+}
+
+// ─── POST /ai/chat/{chat_id}/regenerate ────────────────────
+export async function regenerateChatResponse(
+    chatId: string,
+    sessionId: string,
+    reason?: string,
+    temperature?: number
+): Promise<RegeneratedChatResponse> {
+    const res = await fetch(`${API_BASE_URL}/ai/chat/${chatId}/regenerate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            chat_id: chatId,
+            session_id: sessionId,
+            reason: reason,
+            temperature: temperature,
+        }),
     });
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
     return res.json();

@@ -4,7 +4,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ChatMessage, LocalSession, ChatMode } from '../types/tutor';
-import { createSession, sendChat, getHistory, uploadDocument, askDocumentQuestion } from '../services/tutorService';
+import { createSession, sendChat, getHistory, uploadDocument, askDocumentQuestion, submitChatFeedback, regenerateChatResponse } from '../services/tutorService';
 
 const mkId = () => `${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
@@ -256,6 +256,7 @@ export const useTutorStore = create<TutorState>((set, get) => ({
             let replyText = '';
             let tokensUsed = 0;
             let respTimestamp = new Date().toISOString();
+            let chatId = '';
 
             if (activeDocumentId) {
                 // Route to document ask
@@ -277,14 +278,16 @@ export const useTutorStore = create<TutorState>((set, get) => ({
                 replyText = apiRes.ai_response;
                 tokensUsed = apiRes.tokens_used;
                 respTimestamp = apiRes.timestamp;
+                chatId = apiRes.chat_id;  // Capture chat_id for feedback/regenerate
             }
 
             const aiMsg: ChatMessage = {
-                id: mkId(), // we use local ID for uniqueness in list
+                id: mkId(),
                 role: 'assistant',
                 text: replyText,
                 timestamp: respTimestamp,
                 tokensUsed,
+                chatId: chatId,  // Store chat_id for backend operations
             };
 
             set((s) => {
@@ -307,13 +310,32 @@ export const useTutorStore = create<TutorState>((set, get) => ({
     },
 
     // ── Message Actions
-    setFeedback: (messageId, feedback) => {
-        const { activeSessionId } = get();
+    setFeedback: async (messageId, feedback) => {
+        const { activeSessionId, messages } = get();
+        
+        // Update local state immediately for UX
         set((s) => {
             const msgs = s.messages.map(m => m.id === messageId ? { ...m, feedback } : m);
             if (activeSessionId) persistSessionCache(activeSessionId, msgs);
             return { messages: msgs };
         });
+
+        // Send feedback to backend
+        try {
+            const message = messages.find(m => m.id === messageId);
+            if (!message || !message.chatId || !activeSessionId) return;
+            
+            const isLiked = feedback === 'like' ? true : feedback === 'dislike' ? false : null;
+            
+            await submitChatFeedback(
+                message.chatId,
+                activeSessionId,
+                isLiked
+            );
+        } catch (error) {
+            console.error("Failed to submit feedback to backend", error);
+            // Keep local state even if backend fails
+        }
     },
 
     regenerateMessage: async (messageId) => {
@@ -322,6 +344,12 @@ export const useTutorStore = create<TutorState>((set, get) => ({
 
         const targetIndex = messages.findIndex(m => m.id === messageId);
         if (targetIndex === -1) return;
+
+        const targetMessage = messages[targetIndex];
+        if (!targetMessage.chatId) {
+            console.error("Message has no chatId, cannot regenerate");
+            return;
+        }
 
         let userText = '';
         for (let i = targetIndex - 1; i >= 0; i--) {
@@ -343,8 +371,10 @@ export const useTutorStore = create<TutorState>((set, get) => ({
             let replyText = '';
             let tokensUsed = 0;
             let respTimestamp = new Date().toISOString();
+            let newChatId = '';
 
             if (activeDocumentId) {
+                // For document questions, just re-ask the same question
                 const apiRes = await askDocumentQuestion({
                     session_id: activeSessionId,
                     document_id: activeDocumentId,
@@ -354,14 +384,15 @@ export const useTutorStore = create<TutorState>((set, get) => ({
                 replyText = apiRes.answer;
                 respTimestamp = apiRes.timestamp;
             } else {
-                const apiRes = await sendChat({
-                    session_id: activeSessionId,
-                    message: userText,
-                    mode: chatMode
-                });
-                replyText = apiRes.ai_response;
-                tokensUsed = apiRes.tokens_used;
+                // For regular chat, use the regenerate endpoint
+                const apiRes = await regenerateChatResponse(
+                    targetMessage.chatId,
+                    activeSessionId,
+                    "user_requested"
+                );
+                replyText = apiRes.new_response;
                 respTimestamp = apiRes.timestamp;
+                newChatId = apiRes.regenerated_chat_id;
             }
 
             const aiMsg: ChatMessage = {
@@ -370,23 +401,23 @@ export const useTutorStore = create<TutorState>((set, get) => ({
                 text: replyText,
                 timestamp: respTimestamp,
                 tokensUsed,
+                chatId: newChatId,  // Store new chat_id for regenerated message
             };
 
             set((s) => {
-                // Determine insertion index based on whether we removed the last message or not
                 const currentMessages = s.messages;
-                // If the target message is still there (meaning it wasn't the last message), we just append.
                 const finalMessages = [...currentMessages, aiMsg];
                 persistSessionCache(activeSessionId, finalMessages);
                 return { messages: finalMessages, isTyping: false };
             });
             
         } catch (error) {
+            console.error("Regenerate error:", error);
             set((s) => {
                 const errorMsg: ChatMessage = {
                     id: mkId(),
                     role: 'assistant',
-                    text: '⚠️ failed to regenerate response. Please try again.',
+                    text: '⚠️ Failed to regenerate response. Please try again.',
                     timestamp: new Date().toISOString(),
                 };
                 return { messages: [...s.messages, errorMsg], isTyping: false };

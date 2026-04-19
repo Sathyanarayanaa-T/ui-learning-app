@@ -24,6 +24,7 @@ export interface DocumentQuestionRequest {
 
 export interface ChatResponse {
     session_id: string;
+    chat_id: string;  // Added for feedback/regenerate tracking
     user_message: string;
     ai_response: string;
     mode: string;
@@ -70,6 +71,26 @@ export interface DocumentQuestionResponse {
     document_referenced: boolean;
 }
 
+export interface ChatFeedbackResponse {
+    feedback_id: string;
+    chat_id: string;
+    is_liked: boolean | null;
+    feedback_text?: string;
+    improvement_suggestions?: string[];
+    created_at: string;
+}
+
+export interface RegeneratedChatResponse {
+    regeneration_id: string;
+    original_chat_id: string;
+    regenerated_chat_id: string;
+    original_response: string;
+    new_response: string;
+    reason?: string;
+    tokens_used?: number;
+    timestamp: string;
+}
+
 // ─── Local (UI) Models ────────────────────────────────────────
 // These exist only in the frontend; they are not API shapes.
 
@@ -80,6 +101,7 @@ export interface ChatMessage {
     timestamp: string;
     tokensUsed?: number;
     feedback?: 'like' | 'dislike';
+    chatId?: string;  // Backend chat ID for feedback/regenerate
 }
 
 export interface LocalSession {
