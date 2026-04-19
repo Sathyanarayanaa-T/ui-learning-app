@@ -103,7 +103,7 @@ export default function TutorScreen() {
     const renderHeader = () => (
         <View style={{ width: '100%', maxWidth: 500, alignSelf: 'center' }}>
             <View style={styles.centeredInputSection}>
-                <Ionicons name="hardware-chip" size={52} color={Colors.canary} style={{ marginBottom: Spacing.md }} />
+                <Ionicons name="bulb" size={52} color={Colors.canary} style={{ marginBottom: Spacing.md }} />
                 <AppText variant="title" style={[styles.emptyTitle, { color: isDark ? Colors.snow : Colors.darkBlue }]}>Ready to start learning?</AppText>
                 <View style={styles.startModesContainer}>
                     {MODES.map((mode) => (
@@ -200,7 +200,7 @@ export default function TutorScreen() {
                         <View style={[styles.headerInner, { paddingTop: Spacing.md, paddingBottom: Spacing.lg }]}>
                             <View>
                                 <AppText style={styles.headerSuper}>INTELLIGENCE AT YOUR PACE</AppText>
-                                <AppText style={styles.headerTitle}>Erudia</AppText>
+                                <AppText style={styles.headerTitle}>TutorX</AppText>
                             </View>
                             <TouchableOpacity
                                 onPress={toggleTheme}
@@ -294,7 +294,7 @@ export default function TutorScreen() {
                                 <TextInput
                                     value={input}
                                     onChangeText={setInput}
-                                    placeholder="Message Erudia..."
+                                    placeholder="Message TutorX..."
                                     placeholderTextColor={colors.silver}
                                     style={[styles.chatInput, { backgroundColor: colors.white, borderColor: colors.borderLight, color: colors.black }]}
                                     multiline

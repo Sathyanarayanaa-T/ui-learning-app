@@ -39,7 +39,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message }) => {
             {/* Avatar */}
             {!isUser && (
                 <View style={[styles.avatar, { backgroundColor: colors.hexawareBlue }]}>
-                    <Text style={styles.avatarText}>AI</Text>
+                    <Ionicons name="bulb" size={16} color="#FFF" />
                 </View>
             )}
 

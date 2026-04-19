@@ -19,10 +19,11 @@ export const DarkColors: ThemeColors = {
     darkBlue: '#6B7BFF',   // lightened for readability as text on dark bg
 
     // Dark surfaces — near-black with the faintest navy tint
-    black: '#DDDFF5',          // primary TEXT becomes near-white
-    light: '#08081A',          // page background   ← very dark
-    white: '#10102C',          // card surface
-    snow: '#181835',          // elevated / nested card
+    // Dark surfaces — paler blue base for dark mode
+    black: '#E2E8F0',          // primary TEXT becomes near-white
+    light: '#111827',          // page background
+    white: '#1E293B',          // card surface
+    snow: '#334155',           // elevated / nested card
 
     // Highlight — unchanged, vivid over dark bg
     honey: '#EA9D00',

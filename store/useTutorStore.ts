@@ -108,7 +108,7 @@ export const useTutorStore = create<TutorState>((set, get) => ({
                     ? "Welcome to **Teaching Mode**! I'll break down complex concepts step-by-step and help you build a deep understanding. What topic would you like to learn about?" 
                     : mode === 'guiding' 
                     ? "Hi! You are in **Guiding Mode**. I will use Socratic questioning to help you find the answers yourself. I'll provide hints and ask thought-provoking questions to guide your learning journey. What problem are you trying to solve?" 
-                    : "Hello! I am Erudia in **Normal Q&A** mode. I'm here to provide direct, clear answers and explanations to your questions. How can I help you today?";
+                    : "Hello! I am TutorX in **Normal Q&A** mode. I'm here to provide direct, clear answers and explanations to your questions. How can I help you today?";
 
             const introMsg: ChatMessage = {
                 id: mkId(),
