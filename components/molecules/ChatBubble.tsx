@@ -15,7 +15,7 @@ interface ChatBubbleProps {
 // ── Chat Bubble ──────────────────────────────────────────────
 export const ChatBubble: React.FC<ChatBubbleProps> = ({ message }) => {
     const colors = useColors();
-    const { setFeedback, regenerateMessage } = useTutorStore();
+    const { setFeedback, regenerateMessage, setEditingMessageId } = useTutorStore();
     const isUser = message.role === 'user';
 
     const handleCopy = async () => {
@@ -90,11 +90,18 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message }) => {
                     {message.text}
                 </Markdown>
 
-                {message.timestamp ? (
-                    <Text style={[styles.timestamp, { color: isUser ? '#FFFFFF88' : colors.silver }]}>
-                        {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </Text>
-                ) : null}
+                <View style={styles.timestampRow}>
+                    {isUser && (
+                        <TouchableOpacity onPress={() => setEditingMessageId(message.id)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={styles.editIconBtn}>
+                            <Ionicons name="pencil" size={12} color="#FFFFFF88" />
+                        </TouchableOpacity>
+                    )}
+                    {message.timestamp && (
+                        <Text style={[styles.timestamp, { color: isUser ? '#FFFFFF88' : colors.silver }]}>
+                            {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                    )}
+                </View>
 
                 {!isUser && (
                     <View style={[styles.actionsFooter, { borderTopColor: colors.borderLight }]}>
@@ -144,7 +151,9 @@ const styles = StyleSheet.create({
         color: '#14CBDE',
         lineHeight: 20,
     },
-    timestamp: { fontSize: 10, marginTop: Spacing.xs, textAlign: 'right' },
+    timestampRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: Spacing.xs, gap: Spacing.xs },
+    editIconBtn: { padding: 2 },
+    timestamp: { fontSize: 10, textAlign: 'right' },
     actionsFooter: { 
         flexDirection: 'row', 
         alignItems: 'center', 

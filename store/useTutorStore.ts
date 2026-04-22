@@ -65,6 +65,9 @@ interface TutorState {
     // ── Message Actions ──────────────────────────────────────
     setFeedback: (messageId: string, feedback: 'like' | 'dislike' | undefined) => void;
     regenerateMessage: (messageId: string) => Promise<void>;
+    editMessage: (messageId: string, newText: string) => Promise<void>;
+    editingMessageId: string | null;
+    setEditingMessageId: (id: string | null) => void;
 }
 
 // ─── Store Implementation ──────────────────────────────────────
@@ -310,6 +313,9 @@ export const useTutorStore = create<TutorState>((set, get) => ({
     },
 
     // ── Message Actions
+    editingMessageId: null,
+    setEditingMessageId: (id) => set({ editingMessageId: id }),
+
     setFeedback: async (messageId, feedback) => {
         const { activeSessionId, messages } = get();
         
@@ -421,6 +427,92 @@ export const useTutorStore = create<TutorState>((set, get) => ({
                     timestamp: new Date().toISOString(),
                 };
                 return { messages: [...s.messages, errorMsg], isTyping: false };
+            });
+        }
+    },
+
+    editMessage: async (messageId, newText) => {
+        const { activeSessionId, chatMode, activeDocumentId, messages } = get();
+        if (!activeSessionId) return;
+
+        const targetIndex = messages.findIndex(m => m.id === messageId);
+        if (targetIndex === -1 || messages[targetIndex].role !== 'user') return;
+
+        const hasAiResponse = targetIndex + 1 < messages.length && messages[targetIndex + 1].role === 'assistant';
+        
+        const updatedMessages = [...messages];
+        updatedMessages[targetIndex] = { ...updatedMessages[targetIndex], text: newText };
+        if (hasAiResponse) {
+            updatedMessages.splice(targetIndex + 1, 1);
+        }
+
+        set({ messages: updatedMessages, isTyping: true });
+
+        try {
+            let replyText = '';
+            let tokensUsed = 0;
+            let respTimestamp = new Date().toISOString();
+            let chatId = '';
+
+            if (activeDocumentId) {
+                const apiRes = await askDocumentQuestion({
+                    session_id: activeSessionId,
+                    document_id: activeDocumentId,
+                    question: newText,
+                    mode: chatMode
+                });
+                replyText = apiRes.answer;
+                respTimestamp = apiRes.timestamp;
+            } else {
+                const apiRes = await sendChat({
+                    session_id: activeSessionId,
+                    message: newText,
+                    mode: chatMode
+                });
+                replyText = apiRes.ai_response;
+                tokensUsed = apiRes.tokens_used;
+                respTimestamp = apiRes.timestamp;
+                chatId = apiRes.chat_id;
+            }
+
+            const aiMsg: ChatMessage = {
+                id: mkId(),
+                role: 'assistant',
+                text: replyText,
+                timestamp: respTimestamp,
+                tokensUsed,
+                chatId: chatId,
+            };
+
+            set((s) => {
+                const msgs = [...s.messages];
+                const newTargetIndex = msgs.findIndex(m => m.id === messageId);
+                if (newTargetIndex !== -1) {
+                    msgs.splice(newTargetIndex + 1, 0, aiMsg);
+                } else {
+                    msgs.push(aiMsg);
+                }
+                persistSessionCache(activeSessionId, msgs);
+                return { messages: msgs, isTyping: false };
+            });
+
+        } catch (error) {
+            console.error("Edit error:", error);
+            set((s) => {
+                const errorMsg: ChatMessage = {
+                    id: mkId(),
+                    role: 'assistant',
+                    text: '⚠️ Failed to generate new response. Please try again.',
+                    timestamp: new Date().toISOString(),
+                };
+                const msgs = [...s.messages];
+                const newTargetIndex = msgs.findIndex(m => m.id === messageId);
+                if (newTargetIndex !== -1) {
+                    msgs.splice(newTargetIndex + 1, 0, errorMsg);
+                } else {
+                    msgs.push(errorMsg);
+                }
+                return { messages: msgs, isTyping: false };
             });
         }
     },

@@ -23,6 +23,7 @@ interface MessageBubbleProps {
     onDislike?: (id: string) => void;
     onRetry?: (lastUserMessage: string) => void;
     onRegenerate?: (id: string) => void;
+    onEdit?: (id: string) => void;
 }
 
 const TypingDots = () => {
@@ -88,7 +89,14 @@ export function MessageBubble({ message, onLike, onDislike, onRetry, onRegenerat
                     <View style={[styles.bubble, styles.userBubble]}>
                         <Text style={styles.userText}>{message.text || message.content}</Text>
                     </View>
-                    <Text style={styles.timestamp}>{message.timestamp}</Text>
+                    <View style={styles.userFooter}>
+                        {onEdit && (
+                            <TouchableOpacity onPress={() => onEdit(message.id)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={styles.actionBtn}>
+                                <Ionicons name="pencil" size={12} color="#888888" />
+                            </TouchableOpacity>
+                        )}
+                        <Text style={styles.timestamp}>{message.timestamp}</Text>
+                    </View>
                 </View>
             </View>
         );
@@ -144,6 +152,12 @@ const styles = StyleSheet.create({
         justifyContent: 'flex-end',
         marginBottom: 16,
         paddingHorizontal: 16,
+    },
+    userFooter: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 4,
+        gap: 4,
     },
     userBubbleContainer: {
         alignItems: 'flex-end',

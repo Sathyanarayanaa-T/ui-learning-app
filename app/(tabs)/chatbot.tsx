@@ -14,10 +14,11 @@ import { useColors } from '../../hooks/useColors';
 import { Colors, Spacing, Radius, FontSize, Shadow } from '../../constants/theme';
 
 export default function ChatbotScreen() {
-    const { 
+    const {
         sessions, loadSessions, removeSession, 
         activeSessionId, activeSessionTitle, startNewSession, restoreSession, clearActiveChat,
-        messages, isTyping, sendMessage, setMessages 
+        messages, isTyping, sendMessage, setMessages,
+        editingMessageId, setEditingMessageId, editMessage
     } = useChatbotStore();
 
     const isDark = useAppStore((s) => s.isDark);
@@ -30,6 +31,15 @@ export default function ChatbotScreen() {
         loadSessions();
     }, []);
 
+    useEffect(() => {
+        if (editingMessageId) {
+            const msg = messages.find(m => m.id === editingMessageId);
+            if (msg) setInputText(msg.text || msg.content || '');
+        } else {
+            setInputText('');
+        }
+    }, [editingMessageId, messages]);
+
     const handleSend = async (textToProcess?: string) => {
         const text = textToProcess || inputText.trim();
         if (!text || isLoading || !activeSessionId) return;
@@ -39,7 +49,12 @@ export default function ChatbotScreen() {
         setIsLoading(true);
 
         try {
-            await sendMessage(text);
+            if (editingMessageId) {
+                setEditingMessageId(null);
+                await editMessage(editingMessageId, text);
+            } else {
+                await sendMessage(text);
+            }
         } catch (error) {
             
         } finally {
@@ -178,12 +193,29 @@ export default function ChatbotScreen() {
                                 onLike={handleLike}
                                 onDislike={handleDislike}
                                 onRetry={handleRetry}
-                                onRegenerate={(id) => useChatbotStore.getState().regenerateMessage(id)}
+                                onRegenerate={(id) => regenerateMessage(id)}
+                                onEdit={(id) => setEditingMessageId(id)}
                             />
                         )}
                     />
                 </View>
 
+                {editingMessageId && (
+                    <View style={[styles.editingBanner, { backgroundColor: colors.hexawareBlue + '15', borderLeftColor: colors.hexawareBlue }]}>
+                        <View style={styles.editingBannerContent}>
+                            <Ionicons name="pencil" size={16} color={colors.hexawareBlue} />
+                            <View style={{ marginLeft: 8, flex: 1 }}>
+                                <AppText style={{ color: colors.hexawareBlue, fontSize: 12, fontWeight: 'bold' }}>Editing Message</AppText>
+                                <AppText numberOfLines={1} style={{ color: colors.silver, fontSize: 12 }}>
+                                    {messages.find(m => m.id === editingMessageId)?.text || messages.find(m => m.id === editingMessageId)?.content}
+                                </AppText>
+                            </View>
+                        </View>
+                        <TouchableOpacity onPress={() => setEditingMessageId(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                            <Ionicons name="close" size={20} color={colors.silver} />
+                        </TouchableOpacity>
+                    </View>
+                )}
                 <View style={[styles.inputContainer, { backgroundColor: colors.white }]}>
                     <TouchableOpacity style={styles.attachBtn}>
                         <Ionicons name="attach" size={24} color={colors.silver} />
@@ -195,7 +227,6 @@ export default function ChatbotScreen() {
                         placeholder="Message HexaLearn..."
                         placeholderTextColor={colors.silver}
                         multiline
-                        maxLength={1000}
                     />
                     <TouchableOpacity 
                         style={[styles.sendBtn, { backgroundColor: (!inputText.trim() || isLoading) ? colors.borderLight : colors.hexawareBlue }]}
@@ -371,7 +402,7 @@ const styles = StyleSheet.create({
     textInput: {
         flex: 1,
         minHeight: 40,
-        maxHeight: 100,
+        maxHeight: 180,
         backgroundColor: '#F8F8F8',
         borderRadius: 20,
         paddingHorizontal: 16,
@@ -392,5 +423,16 @@ const styles = StyleSheet.create({
     },
     sendBtnDisabled: {
         backgroundColor: '#D1D1D1',
+    },
+    editingBanner: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
+        borderTopLeftRadius: Radius.md, borderTopRightRadius: Radius.md,
+        borderLeftWidth: 4,
+        marginBottom: Spacing.xs,
+        marginHorizontal: Spacing.sm,
+    },
+    editingBannerContent: {
+        flexDirection: 'row', alignItems: 'center', flex: 1,
     },
 });

@@ -30,7 +30,8 @@ export default function TutorScreen() {
         sendMessage, clearActiveChat, isStarting,
         sessions, loadSessions, restoreSession, removeSession,
         chatMode, setChatMode,
-        activeDocumentId, activeDocumentName, isUploading, uploadFile, clearActiveDocument
+        activeDocumentId, activeDocumentName, isUploading, uploadFile, clearActiveDocument,
+        editingMessageId, setEditingMessageId, editMessage
     } = useTutorStore();
     
     const colors = useColors();
@@ -67,11 +68,27 @@ export default function TutorScreen() {
         loadSessions();
     }, []);
 
+    useEffect(() => {
+        if (editingMessageId) {
+            const msg = messages.find(m => m.id === editingMessageId);
+            if (msg) setInput(msg.text);
+        } else {
+            setInput('');
+        }
+    }, [editingMessageId, messages]);
+
     const handleSend = async () => {
         const text = input.trim();
         if (!text || isTyping) return;
-        setInput('');
-        await sendMessage(text);
+        
+        if (editingMessageId) {
+            setInput('');
+            setEditingMessageId(null);
+            await editMessage(editingMessageId, text);
+        } else {
+            setInput('');
+            await sendMessage(text);
+        }
     };
 
     const handleAttach = async () => {
@@ -287,6 +304,22 @@ export default function TutorScreen() {
                                     </TouchableOpacity>
                                 </View>
                             )}
+                            {editingMessageId && (
+                                <View style={[styles.editingBanner, { backgroundColor: colors.hexawareBlue + '15', borderLeftColor: colors.hexawareBlue }]}>
+                                    <View style={styles.editingBannerContent}>
+                                        <Ionicons name="pencil" size={16} color={colors.hexawareBlue} />
+                                        <View style={{ marginLeft: 8, flex: 1 }}>
+                                            <AppText style={{ color: colors.hexawareBlue, fontSize: 12, fontWeight: 'bold' }}>Editing Message</AppText>
+                                            <AppText numberOfLines={1} style={{ color: colors.silver, fontSize: 12 }}>
+                                                {messages.find(m => m.id === editingMessageId)?.text}
+                                            </AppText>
+                                        </View>
+                                    </View>
+                                    <TouchableOpacity onPress={() => setEditingMessageId(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                                        <Ionicons name="close" size={20} color={colors.silver} />
+                                    </TouchableOpacity>
+                                </View>
+                            )}
                             <View style={styles.chatInputRow}>
                                 <TouchableOpacity onPress={handleAttach} disabled={isTyping || isUploading} style={styles.attachBtn}>
                                     {isUploading ? <ActivityIndicator size="small" color={colors.hexawareBlue} /> : <Ionicons name="attach" size={24} color={colors.silver} />}
@@ -394,12 +427,22 @@ const styles = StyleSheet.create({
     
     // ── Chat Input Bar
     chatInputContainer: { borderTopWidth: 1, paddingTop: Spacing.sm, paddingHorizontal: Spacing.lg },
+    editingBanner: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
+        borderTopLeftRadius: Radius.md, borderTopRightRadius: Radius.md,
+        borderLeftWidth: 4,
+        marginBottom: Spacing.xs,
+    },
+    editingBannerContent: {
+        flexDirection: 'row', alignItems: 'center', flex: 1,
+    },
     chatInputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.sm, paddingBottom: Spacing.sm },
     attachBtn: { width: 44, height: 46, alignItems: 'center', justifyContent: 'center' },
     chatInput: {
         flex: 1, borderRadius: Radius.lg, borderWidth: 1.5,
         paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
-        fontSize: FontSize.md, maxHeight: 120, minHeight: 46,
+        fontSize: FontSize.md, maxHeight: 180, minHeight: 46,
     },
     chatSendBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
 });

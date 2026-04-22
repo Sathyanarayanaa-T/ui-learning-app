@@ -58,6 +58,9 @@ interface ChatbotState {
     setTyping: (isTyping: boolean) => void;
     appendError: (errorMsg: ChatMessage) => void;
     regenerateMessage: (messageId: string) => Promise<void>;
+    editingMessageId: string | null;
+    setEditingMessageId: (id: string | null) => void;
+    editMessage: (messageId: string, newText: string) => Promise<void>;
 }
 
 // ─── Store Implementation ──────────────────────────────────────
@@ -284,6 +287,58 @@ export const useChatbotStore = create<ChatbotState>((set, get) => ({
             
         } catch (error) {
             console.error("Regenerate error:", error);
+            set({ isTyping: false });
+        }
+    },
+
+    editingMessageId: null,
+    setEditingMessageId: (id) => set({ editingMessageId: id }),
+    editMessage: async (messageId, newText) => {
+        const { activeSessionId, messages } = get();
+        if (!activeSessionId) return;
+
+        const targetIndex = messages.findIndex(m => m.id === messageId);
+        if (targetIndex === -1 || messages[targetIndex].role !== 'user') return;
+
+        const hasAiResponse = targetIndex - 1 >= 0 && messages[targetIndex - 1].role === 'assistant';
+        
+        const updatedMessages = [...messages];
+        updatedMessages[targetIndex] = { ...updatedMessages[targetIndex], text: newText, content: newText };
+        if (hasAiResponse) {
+            updatedMessages.splice(targetIndex - 1, 1);
+        }
+
+        set({ messages: updatedMessages, isTyping: true });
+
+        try {
+            const apiRes = await sendChat({
+                session_id: activeSessionId,
+                message: newText,
+                mode: 'normal'
+            });
+
+            const aiMsg: ChatMessage = {
+                id: apiRes.chat_id || mkId(),
+                role: 'assistant',
+                text: apiRes.ai_response,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                tokensUsed: apiRes.tokens_used,
+                chatId: apiRes.chat_id,
+            };
+
+            set((s) => {
+                const msgs = [...s.messages];
+                const newTargetIndex = msgs.findIndex(m => m.id === messageId);
+                if (newTargetIndex !== -1) {
+                    msgs.splice(newTargetIndex, 0, aiMsg); // Insert BEFORE the user message since reversed
+                } else {
+                    msgs.unshift(aiMsg);
+                }
+                persistSessionCache(activeSessionId, msgs);
+                return { messages: msgs, isTyping: false };
+            });
+        } catch (error) {
+            console.error("Edit error:", error);
             set({ isTyping: false });
         }
     },
