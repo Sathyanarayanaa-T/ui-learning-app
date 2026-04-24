@@ -1,17 +1,12 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import {
-    View, TouchableOpacity, StyleSheet, Platform, Text,
+    View, StyleSheet
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useAppStore } from '../../store/useAppStore';
-import { useColors } from '../../hooks/useColors';
-import { Colors, Shadow, FontSize, FontWeight } from '../../constants/theme';
-
 
 export default function TabsLayout() {
-    const colors = useColors();
     const isDark = useAppStore((s) => s.isDark);
     
     return (
@@ -21,14 +16,14 @@ export default function TabsLayout() {
                 screenOptions={{ 
                     headerShown: false,
                     tabBarStyle: {
-                        backgroundColor: isDark ? colors.white : Colors.darkBlue,
+                        backgroundColor: '#FFFFFF',
                         height: 62,
                         borderTopWidth: 1,
-                        borderTopColor: isDark ? colors.borderLight : 'transparent',
+                        borderTopColor: '#E5E7EB',
                         elevation: 0,
                     },
-                    tabBarActiveTintColor: '#FFFFFF',
-                    tabBarInactiveTintColor: '#FFFFFF55',
+                    tabBarActiveTintColor: '#4F46E5',
+                    tabBarInactiveTintColor: '#9CA3AF',
                     tabBarLabelStyle: {
                         fontSize: 11,
                         fontWeight: '500',
@@ -43,7 +38,7 @@ export default function TabsLayout() {
                     name="index" 
                     options={{
                         title: 'Home',
-                        tabBarIcon: ({ color, size }) => (
+                        tabBarIcon: ({ color }) => (
                             <Ionicons name="home" size={24} color={color} />
                         ),
                     }}
@@ -51,25 +46,37 @@ export default function TabsLayout() {
                 <Tabs.Screen 
                     name="chatbot" 
                     options={{
-                        title: 'HexaLearn',
-                        tabBarIcon: ({ color, size }) => (
-                            <Ionicons name="chatbubble-ellipses" size={24} color={color} />
+                        title: 'Search',
+                        tabBarIcon: ({ color }) => (
+                            <Ionicons name="search" size={24} color={color} />
                         ),
                     }}
                 />
                 <Tabs.Screen 
                     name="tutor" 
                     options={{
-                        title: 'TutorX',
-                        tabBarIcon: ({ color, size }) => (
-                            <Ionicons name="bulb" size={24} color={color} />
+                        title: 'Courses',
+                        tabBarIcon: ({ color }) => (
+                            <Ionicons name="book" size={24} color={color} />
                         ),
                     }}
                 />
                 <Tabs.Screen 
                     name="history" 
                     options={{
-                        href: null,
+                        title: 'Achievements',
+                        tabBarIcon: ({ color }) => (
+                            <Ionicons name="trophy" size={24} color={color} />
+                        ),
+                    }}
+                />
+                <Tabs.Screen 
+                    name="profile" 
+                    options={{
+                        title: 'Profile',
+                        tabBarIcon: ({ color }) => (
+                            <Ionicons name="person" size={24} color={color} />
+                        ),
                     }}
                 />
             </Tabs>

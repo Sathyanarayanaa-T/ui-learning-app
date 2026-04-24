@@ -104,39 +104,42 @@ export const useTutorStore = create<TutorState>((set, get) => ({
 
     startNewSession: async (mode) => {
         set({ isStarting: true });
+        let sessionId = '';
         try {
             const res = await createSession();
-            const pretextText = 
-                mode === 'teaching' 
-                    ? "Welcome to **Teaching Mode**! I'll break down complex concepts step-by-step and help you build a deep understanding. What topic would you like to learn about?" 
-                    : mode === 'guiding' 
-                    ? "Hi! You are in **Guiding Mode**. I will use Socratic questioning to help you find the answers yourself. I'll provide hints and ask thought-provoking questions to guide your learning journey. What problem are you trying to solve?" 
-                    : "Hello! I am TutorX in **Normal Q&A** mode. I'm here to provide direct, clear answers and explanations to your questions. How can I help you today?";
-
-            const introMsg: ChatMessage = {
-                id: mkId(),
-                role: 'assistant',
-                text: pretextText,
-                timestamp: new Date().toISOString(),
-            };
-
-            set({
-                activeSessionId: res.session_id,
-                activeSessionTitle: '', // Will be set on first message
-                activeDocumentId: null,
-                activeDocumentName: null,
-                chatMode: mode,
-                messages: [introMsg],
-                isStarting: false,
-            });
-            
-            await persistSessionCache(res.session_id, [introMsg]);
-            // We don't add to sessions list until the first message is sent, 
-            // to avoid cluttering history with completely empty sessions.
+            sessionId = res.session_id;
         } catch (error) {
-            console.error("Failed to create session", error);
-            set({ isStarting: false });
+            console.error("Failed to create session, falling back to mock UI", error);
+            sessionId = `mock_session_${mkId()}`;
         }
+
+        const pretextText = 
+            mode === 'teaching' 
+                ? "Welcome to **Teaching Mode**! I'll break down complex concepts step-by-step and help you build a deep understanding. What topic would you like to learn about?" 
+                : mode === 'guiding' 
+                ? "Hi! You are in **Guiding Mode**. I will use Socratic questioning to help you find the answers yourself. I'll provide hints and ask thought-provoking questions to guide your learning journey. What problem are you trying to solve?" 
+                : "Hello! I am TutorX in **Normal Q&A** mode. I'm here to provide direct, clear answers and explanations to your questions. How can I help you today?";
+
+        const introMsg: ChatMessage = {
+            id: mkId(),
+            role: 'assistant',
+            text: pretextText,
+            timestamp: new Date().toISOString(),
+        };
+
+        set({
+            activeSessionId: sessionId,
+            activeSessionTitle: '', // Will be set on first message
+            activeDocumentId: null,
+            activeDocumentName: null,
+            chatMode: mode,
+            messages: [introMsg],
+            isStarting: false,
+        });
+        
+        await persistSessionCache(sessionId, [introMsg]);
+        // We don't add to sessions list until the first message is sent, 
+        // to avoid cluttering history with completely empty sessions.
     },
 
     isRestoring: false,

@@ -1,61 +1,52 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View, StyleSheet, ScrollView, TextInput, TouchableOpacity,
-    KeyboardAvoidingView, Platform, FlatList, ActivityIndicator, Keyboard,
+    KeyboardAvoidingView, Platform, Text, SafeAreaView, Animated, Dimensions, ActivityIndicator
 } from 'react-native';
-import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
+import * as DocumentPicker from 'expo-document-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { AppText } from '../../components/atoms/AppText';
 import { ChatBubble } from '../../components/molecules/ChatBubble';
 import { TypingIndicator } from '../../components/molecules/TypingIndicator';
-import { WebContainer } from '../../components/layout/WebContainer';
-import * as DocumentPicker from 'expo-document-picker';
-import { Colors, Spacing, Radius, FontSize, FontWeight, Shadow } from '../../constants/theme';
 import { useTutorStore } from '../../store/useTutorStore';
 import { useAppStore } from '../../store/useAppStore';
-import { useColors } from '../../hooks/useColors';
-import type { ChatMessage, ChatMode } from '../../types/tutor';
-import { useRouter } from 'expo-router';
-
-const MODES: { value: ChatMode, label: string, subtitle: string, icon: keyof typeof Ionicons.glyphMap }[] = [
-    { value: 'normal', label: 'Resolve', subtitle: 'Normal QA: Direct Q&A answers and explanations', icon: 'chatbubbles-outline' },
-    { value: 'teaching', label: 'Mastery', subtitle: 'Teaching: Detailed conceptual breakdowns', icon: 'school-outline' },
-    { value: 'guiding', label: 'Navigate', subtitle: 'Guiding: Socratic hints and guided learning', icon: 'compass-outline' }
-];
 
 export default function TutorScreen() {
-    const {
-        activeSessionId, activeSessionTitle, messages, isTyping, startNewSession, 
-        sendMessage, clearActiveChat, isStarting,
-        sessions, loadSessions, restoreSession, removeSession,
-        chatMode, setChatMode,
-        activeDocumentId, activeDocumentName, isUploading, uploadFile, clearActiveDocument,
-        editingMessageId, setEditingMessageId, editMessage
+    const { 
+        startNewSession, sendMessage, messages, sessions, loadSessions, restoreSession,
+        isTyping, editingMessageId, setEditingMessageId, editMessage,
+        activeDocumentId, activeDocumentName, isUploading, uploadFile, clearActiveDocument
     } = useTutorStore();
-    
-    const colors = useColors();
-    const { isDark, toggleTheme } = useAppStore();
-    const insets = useSafeAreaInsets();
-    const router = useRouter();
+    // Safely pull user from store if available
+    const user = useAppStore(s => (s as any).user);
+    const username = user?.name || 'there';
 
     const [input, setInput] = useState('');
-    const listRef = useRef<FlatList<ChatMessage>>(null);
-
-    const [activeFilter, setActiveFilter] = useState<string>('All');
+    const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+    const [activeFilter, setActiveFilter] = useState('All');
+    const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
     
-    // FILTERS and mappings
+    const handleAttach = async () => {
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: '*/*',
+                copyToCacheDirectory: true,
+            });
+            if (result.canceled === false) {
+                const doc = result.assets[0];
+                await uploadFile(doc);
+                setIsAttachMenuOpen(false);
+            }
+        } catch (err) {
+            console.error("Document pick error", err);
+        }
+    };
+    
     const FILTERS = ['All', 'Resolve', 'Mastery', 'Navigate'];
     const MODE_MAPPING: Record<string, string> = {
         'Resolve': 'normal',
         'Mastery': 'teaching',
         'Navigate': 'guiding'
-    };
-    
-    const ICON_MAPPING: Record<string, keyof typeof Ionicons.glyphMap> = {
-        'normal': 'chatbubbles-outline',
-        'teaching': 'school-outline',
-        'guiding': 'compass-outline'
     };
 
     const filteredSessions = sessions.filter(s => {
@@ -64,9 +55,20 @@ export default function TutorScreen() {
         return (s.mode || 'normal') === targetMode;
     });
 
+    const { width } = Dimensions.get('window');
+    const slideAnim = useRef(new Animated.Value(width)).current;
+
     useEffect(() => {
         loadSessions();
     }, []);
+
+    useEffect(() => {
+        Animated.timing(slideAnim, {
+            toValue: isHistoryOpen ? 0 : width,
+            duration: 300,
+            useNativeDriver: true,
+        }).start();
+    }, [isHistoryOpen]);
 
     useEffect(() => {
         if (editingMessageId) {
@@ -91,358 +93,517 @@ export default function TutorScreen() {
         }
     };
 
-    const handleAttach = async () => {
-        try {
-            const result = await DocumentPicker.getDocumentAsync({
-                type: '*/*',
-                copyToCacheDirectory: true,
-            });
-            if (result.canceled === false) {
-                const doc = result.assets[0];
-                await uploadFile(doc);
-            }
-        } catch (err) {
-            console.error("Document pick error", err);
-        }
-    };
+    const modes = [
+        { label: "Resolve", value: "normal" as const },
+        { label: "Mastery", value: "teaching" as const },
+        { label: "Navigate", value: "guiding" as const }
+    ];
 
-    const scrollToBottom = () => {
-        if (messages.length > 0) listRef.current?.scrollToEnd({ animated: true });
-    };
-
-    const isChatActive = activeSessionId !== null;
-
-    // ─────────────────────────────────────────────────────────────────
-    // EMPTY STATE / "HOME" VIEW
-    // "Start New Chat" + List of history
-    // ─────────────────────────────────────────────────────────────────
-
-    const renderHeader = () => (
-        <View style={{ width: '100%', maxWidth: 500, alignSelf: 'center' }}>
-            <View style={styles.centeredInputSection}>
-                <Ionicons name="bulb" size={52} color={Colors.canary} style={{ marginBottom: Spacing.md }} />
-                <AppText variant="title" style={[styles.emptyTitle, { color: isDark ? Colors.snow : Colors.darkBlue }]}>Ready to start learning?</AppText>
-                <View style={styles.startModesContainer}>
-                    {MODES.map((mode) => (
-                        <TouchableOpacity
-                            key={mode.value}
-                            onPress={() => startNewSession(mode.value)}
-                            disabled={isStarting}
-                            activeOpacity={0.8}
-                            style={[styles.startModeCard, Shadow.sm, { backgroundColor: colors.snow, paddingVertical: Spacing.md, paddingHorizontal: Spacing.lg }]}
-                        >
-                            <View style={[styles.startModeIcon, { backgroundColor: isDark ? 'rgba(168, 85, 247, 0.2)' : '#F3E8FF' }]}>
-                                <Ionicons name={mode.icon} size={24} color={isDark ? '#D8B4FE' : '#581C87'} />
-                            </View>
-                            <View style={styles.startModeBody}>
-                                <AppText style={[styles.startModeTitle, { color: colors.black }]}>{mode.label}</AppText>
-                                <AppText style={[styles.startModeDesc, { color: colors.silver }]} numberOfLines={2}>
-                                    {mode.subtitle}
-                                </AppText>
-                            </View>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-            </View>
-
-            <View style={styles.historyHeader}>
-                <AppText style={[styles.historyHeaderText, { color: isDark ? Colors.snow : Colors.darkBlue }]}>RECENT ACTIVITY</AppText>
-            </View>
-            
-            <View style={styles.filterContainer}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
-                    {FILTERS.map(filter => {
-                        const isActive = activeFilter === filter;
-                        return (
-                            <TouchableOpacity
-                                key={filter}
-                                onPress={() => setActiveFilter(filter)}
-                                style={[
-                                    styles.filterChip,
-                                    { backgroundColor: isActive ? (isDark ? Colors.silver : Colors.darkBlue) : colors.borderLight }
-                                ]}
-                            >
-                                <AppText style={[styles.filterChipText, { color: isActive ? (isDark ? Colors.darkBlue : Colors.snow) : colors.black }]}>
-                                    {filter}
-                                </AppText>
-                            </TouchableOpacity>
-                        );
-                    })}
-                </ScrollView>
-            </View>
-        </View>
-    );
-
-    const renderItem = ({ item }: { item: any }) => {
-        const mode = item.mode || 'normal';
-        const iconName = ICON_MAPPING[mode] || 'chatbubbles-outline';
-        
-        return (
-            <View style={styles.historyItemWrapper}>
-                <TouchableOpacity 
-                    activeOpacity={0.8}
-                    onPress={() => restoreSession(item)}
-                    style={[styles.historyItemCard, { backgroundColor: colors.snow, borderColor: colors.borderLight }]}
-                >
-                    <View style={styles.historyItemBody}>
-                        <AppText variant="label" style={[styles.historyCardTitle, { color: colors.black }]} numberOfLines={1}>{item.title}</AppText>
-                        <View style={styles.subtitleRow}>
-                            <Ionicons name={iconName} size={14} color={colors.silver} style={styles.subtitleIcon} />
-                            
-                            <Ionicons name="chatbubble-ellipses-outline" size={14} color={colors.silver} style={[styles.subtitleIcon, { marginLeft: Spacing.sm }]} />
-                            <AppText variant="caption" style={styles.subtitleText}>{item.messageCount || 0}</AppText>
-                            
-                            <Ionicons name="calendar-outline" size={14} color={colors.silver} style={[styles.subtitleIcon, { marginLeft: Spacing.sm }]} />
-                            <AppText variant="caption" style={styles.subtitleText}>{new Date(item.createdAt).toLocaleDateString()}</AppText>
-                        </View>
-                    </View>
-                    <TouchableOpacity
-                        onPress={() => removeSession(item.session_id)}
-                        style={styles.deleteBtn}
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                        <Ionicons name="close" size={20} color={colors.silver} />
-                    </TouchableOpacity>
-                </TouchableOpacity>
-            </View>
-        );
-    };
-
-    if (!isChatActive) {
-        return (
-            <View style={[styles.root, { backgroundColor: colors.light }]}>
-                {/* ── Header ── */}
-                <SafeAreaView edges={['top']} style={{ backgroundColor: Colors.darkBlue, zIndex: 10, elevation: 10 }}>
-                    <WebContainer>
-                        <View style={[styles.headerInner, { paddingTop: Spacing.md, paddingBottom: Spacing.lg }]}>
-                            <View>
-                                <AppText style={styles.headerSuper}>INTELLIGENCE AT YOUR PACE</AppText>
-                                <AppText style={styles.headerTitle}>TutorX</AppText>
-                            </View>
-                            <TouchableOpacity
-                                onPress={toggleTheme}
-                                activeOpacity={0.8}
-                                style={[styles.iconBtn, { backgroundColor: 'rgba(255,255,255,0.15)' }]}
-                            >
-                                <Ionicons name={isDark ? 'sunny-outline' : 'moon-outline'} size={20} color={Colors.snow} />
-                            </TouchableOpacity>
-                        </View>
-                    </WebContainer>
-                </SafeAreaView>
-
-                {/* ── Main Unified View ── */}
-                <FlatList
-                    data={filteredSessions}
-                    keyExtractor={item => item.session_id}
-                    renderItem={renderItem}
-                    ListHeaderComponent={renderHeader}
-                    contentContainerStyle={styles.unifiedScrollContent}
-                    showsVerticalScrollIndicator={false}
-                    ListEmptyComponent={() => (
-                        <View style={{ alignItems: 'center', marginTop: Spacing.xl }}>
-                            <AppText style={{ color: colors.silver }}>No activity found.</AppText>
-                        </View>
-                    )}
-                />
-            </View>
-        );
-    }
-
-    // ─────────────────────────────────────────────────────────────────
-    // ACTIVE CHAT VIEW
-    // Header + Segmented Control + Chat List + Input
-    // ─────────────────────────────────────────────────────────────────
     return (
-        <View style={[styles.root, { backgroundColor: colors.light }]}>
-            <View
-                style={[styles.headerCompact, { backgroundColor: Colors.darkBlue, paddingTop: Math.max(insets.top, 16), zIndex: 10, elevation: 10 }]}
-            >
-                <WebContainer>
-                    <View style={styles.headerInner}>
-                        <View style={styles.headerCenter}>
-                            <AppText style={styles.headerTopic} numberOfLines={1}>
-                                {activeSessionTitle || 'New Session'}
-                            </AppText>
-                            <AppText style={styles.headerMode}>
-                                {chatMode === 'normal' ? 'Normal Q&A' : chatMode === 'teaching' ? 'Teaching Mode' : 'Guiding Mode'}
-                            </AppText>
-                        </View>
-                        <TouchableOpacity
-                            onPress={clearActiveChat}
-                            style={[styles.iconBtn, { backgroundColor: 'rgba(255,255,255,0.15)' }]}
-                        >
-                            <Ionicons name="chevron-back" size={20} color={Colors.snow} />
-                        </TouchableOpacity>
-                    </View>
-                </WebContainer>
-            </View>
-
+        <SafeAreaView style={styles.root}>
             <KeyboardAvoidingView
                 style={styles.flex}
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             >
-                <FlatList
-                    ref={listRef}
-                    data={messages}
-                    keyExtractor={(m) => m.id}
-                    renderItem={({ item }) => <ChatBubble message={item} />}
-                    contentContainerStyle={styles.listContent}
-                    onContentSizeChange={scrollToBottom}
-                    ListFooterComponent={isTyping ? <TypingIndicator /> : null}
-                />
+                {/* HEADER */}
+                <View style={styles.header}>
+                    <View style={styles.headerLeft}>
+                        <View style={styles.avatarPlaceholder}>
+                            <Ionicons name="hardware-chip" size={24} color="#4F46E5" />
+                        </View>
+                        <View style={styles.headerTextStack}>
+                            <Text style={styles.greetingLabel}>hello</Text>
+                            <Text style={styles.botName}>Ask Lumi Coach</Text>
+                            <Text style={styles.botSubtitle}>Your AI learning companion ✨</Text>
+                        </View>
+                    </View>
+                    <TouchableOpacity style={styles.historyBtn} onPress={() => setIsHistoryOpen(true)}>
+                        <Ionicons name="time-outline" size={14} color="#6B7280" />
+                        <Text style={styles.historyBtnText}>History</Text>
+                    </TouchableOpacity>
+                </View>
 
-                {/* ── Input bar ─────────────────────────────── */}
-                <View style={[styles.chatInputContainer, { backgroundColor: colors.snow, borderTopColor: colors.borderLight }]}>
-                    <WebContainer>
-                        <SafeAreaView edges={['bottom']}>
-                            {activeDocumentId && (
-                                <View style={[styles.activeDocBadge, { backgroundColor: colors.hexawareBlue + '15' }]}>
-                                    <Ionicons name="document-text" size={14} color={colors.hexawareBlue} />
-                                    <AppText style={styles.activeDocName} numberOfLines={1}>{activeDocumentName}</AppText>
-                                    <TouchableOpacity onPress={clearActiveDocument}>
-                                        <Ionicons name="close-circle" size={16} color={colors.silver} />
+                {/* SCROLLABLE CHAT AREA */}
+                <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                    {/* WELCOME CARD */}
+                    <LinearGradient colors={['#4F46E5', '#7C3AED']} style={styles.welcomeCard} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+                        <View style={styles.welcomeContent}>
+                            <Text style={styles.welcomeTitle}>Hi {username}! 👋</Text>
+                            <Text style={styles.welcomeSubtitle}>How can I help you learn today?</Text>
+                            <View style={styles.quickActionChips}>
+                                {modes.map(m => (
+                                    <TouchableOpacity key={m.label} style={styles.chip} onPress={() => startNewSession(m.value)}>
+                                        <Text style={styles.chipText}>{m.label}</Text>
                                     </TouchableOpacity>
+                                ))}
+                            </View>
+                        </View>
+                        <View style={styles.robotIllustration}>
+                            <Ionicons name="planet-outline" size={80} color="rgba(255,255,255,0.15)" />
+                        </View>
+                    </LinearGradient>
+
+                    {/* DYNAMIC CHAT AREA */}
+                    {messages.length > 0 && (
+                        <View style={styles.dateSeparator}>
+                            <View style={styles.line} />
+                            <Text style={styles.dateText}>Today</Text>
+                            <View style={styles.line} />
+                        </View>
+                    )}
+
+                    {messages.map(m => (
+                        <ChatBubble key={m.id} message={m} />
+                    ))}
+                    {isTyping && <TypingIndicator />}
+
+                </ScrollView>
+
+                {/* INPUT BAR */}
+                <View style={styles.inputBarContainer}>
+                    {activeDocumentId && (
+                        <View style={styles.activeDocBadge}>
+                            <Ionicons name="document-text" size={14} color="#4F46E5" />
+                            <Text style={styles.activeDocName} numberOfLines={1}>{activeDocumentName}</Text>
+                            <TouchableOpacity onPress={clearActiveDocument}>
+                                <Ionicons name="close-circle" size={16} color="#6B7280" />
+                            </TouchableOpacity>
+                        </View>
+                    )}
+                    {editingMessageId && (
+                        <View style={styles.editingBanner}>
+                            <View style={styles.editingBannerContent}>
+                                <Ionicons name="pencil" size={16} color="#4F46E5" />
+                                <View style={{ marginLeft: 8, flex: 1 }}>
+                                    <Text style={{ color: '#4F46E5', fontSize: 12, fontWeight: 'bold' }}>Editing Message</Text>
+                                    <Text numberOfLines={1} style={{ color: '#6B7280', fontSize: 12 }}>
+                                        {messages.find(m => m.id === editingMessageId)?.text}
+                                    </Text>
                                 </View>
-                            )}
-                            {editingMessageId && (
-                                <View style={[styles.editingBanner, { backgroundColor: colors.hexawareBlue + '15', borderLeftColor: colors.hexawareBlue }]}>
-                                    <View style={styles.editingBannerContent}>
-                                        <Ionicons name="pencil" size={16} color={colors.hexawareBlue} />
-                                        <View style={{ marginLeft: 8, flex: 1 }}>
-                                            <AppText style={{ color: colors.hexawareBlue, fontSize: 12, fontWeight: 'bold' }}>Editing Message</AppText>
-                                            <AppText numberOfLines={1} style={{ color: colors.silver, fontSize: 12 }}>
-                                                {messages.find(m => m.id === editingMessageId)?.text}
-                                            </AppText>
-                                        </View>
-                                    </View>
-                                    <TouchableOpacity onPress={() => setEditingMessageId(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                                        <Ionicons name="close" size={20} color={colors.silver} />
-                                    </TouchableOpacity>
-                                </View>
-                            )}
-                            <View style={styles.chatInputRow}>
-                                <TouchableOpacity onPress={handleAttach} disabled={isTyping || isUploading} style={styles.attachBtn}>
-                                    {isUploading ? <ActivityIndicator size="small" color={colors.hexawareBlue} /> : <Ionicons name="attach" size={24} color={colors.silver} />}
+                            </View>
+                            <TouchableOpacity onPress={() => setEditingMessageId(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                                <Ionicons name="close" size={20} color="#6B7280" />
+                            </TouchableOpacity>
+                        </View>
+                    )}
+                    <View style={styles.inputWrapper}>
+                        <TouchableOpacity 
+                            style={styles.addBtn}
+                            onPress={() => setIsAttachMenuOpen(!isAttachMenuOpen)}
+                        >
+                            <Ionicons name={isAttachMenuOpen ? "close" : "add"} size={26} color="#9CA3AF" />
+                        </TouchableOpacity>
+
+                        {isAttachMenuOpen && (
+                            <View style={styles.attachMenu}>
+                                <TouchableOpacity style={styles.attachIconBtn}>
+                                    <Ionicons name="image-outline" size={22} color="#4F46E5" />
                                 </TouchableOpacity>
-                                <TextInput
-                                    value={input}
-                                    onChangeText={setInput}
-                                    placeholder="Message TutorX..."
-                                    placeholderTextColor={colors.silver}
-                                    style={[styles.chatInput, { backgroundColor: colors.white, borderColor: colors.borderLight, color: colors.black }]}
-                                    multiline
-                                    returnKeyType="send"
-                                    onSubmitEditing={handleSend}
-                                    blurOnSubmit={false}
-                                />
-                                <TouchableOpacity
-                                    onPress={handleSend}
-                                    disabled={!input.trim() || isTyping}
-                                    style={[
-                                        styles.chatSendBtn,
-                                        { backgroundColor: input.trim() && !isTyping ? Colors.brightBlue : colors.borderLight },
-                                    ]}
-                                >
-                                    <Ionicons name="arrow-up" size={20} color="#FFF" />
+                                <TouchableOpacity style={styles.attachIconBtn}>
+                                    <Ionicons name="mic-outline" size={22} color="#4F46E5" />
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.attachIconBtn} onPress={handleAttach} disabled={isUploading}>
+                                    {isUploading ? (
+                                        <ActivityIndicator size="small" color="#4F46E5" />
+                                    ) : (
+                                        <Ionicons name="document-outline" size={22} color="#4F46E5" />
+                                    )}
                                 </TouchableOpacity>
                             </View>
-                        </SafeAreaView>
-                    </WebContainer>
+                        )}
+
+                        <TextInput
+                            style={styles.textInput}
+                            placeholder="Ask anything..."
+                            placeholderTextColor="#9CA3AF"
+                            value={input}
+                            onChangeText={setInput}
+                            onSubmitEditing={handleSend}
+                        />
+                        <View style={styles.inputActions}>
+                            <TouchableOpacity style={styles.sendBtn} onPress={handleSend}>
+                                <Ionicons name="arrow-up" size={18} color="#FFFFFF" />
+                            </TouchableOpacity>
+                        </View>
+                    </View>
                 </View>
             </KeyboardAvoidingView>
-        </View>
+
+            {/* OVERLAY for side menu */}
+            {isHistoryOpen && (
+                <TouchableOpacity 
+                    style={styles.overlay} 
+                    activeOpacity={1} 
+                    onPress={() => setIsHistoryOpen(false)} 
+                />
+            )}
+            
+            {/* SIDE MENU */}
+            <Animated.View style={[styles.sideMenu, { transform: [{ translateX: slideAnim }] }]}>
+                <View style={styles.sideMenuHeader}>
+                    <Text style={styles.sideMenuTitle}>Recent Activity</Text>
+                    <TouchableOpacity onPress={() => setIsHistoryOpen(false)}>
+                        <Ionicons name="close" size={24} color="#1E1B4B" />
+                    </TouchableOpacity>
+                </View>
+
+                <View style={styles.filterScrollContainer}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScrollContent}>
+                        {FILTERS.map(filter => {
+                            const isActive = activeFilter === filter;
+                            return (
+                                <TouchableOpacity 
+                                    key={filter} 
+                                    style={[styles.filterChipBtn, isActive && styles.filterChipBtnActive]}
+                                    onPress={() => setActiveFilter(filter)}
+                                >
+                                    <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>{filter}</Text>
+                                </TouchableOpacity>
+                            )
+                        })}
+                    </ScrollView>
+                </View>
+
+                <ScrollView contentContainerStyle={styles.sideMenuContent}>
+                    {filteredSessions.length === 0 ? (
+                        <Text style={styles.emptyHistory}>No recent activity.</Text>
+                    ) : (
+                        filteredSessions.map(s => (
+                            <TouchableOpacity 
+                                key={s.session_id} 
+                                style={styles.historyItemCard} 
+                                onPress={() => { 
+                                    restoreSession(s); 
+                                    setIsHistoryOpen(false); 
+                                }}
+                            >
+                                <Text style={styles.historyCardTitle} numberOfLines={1}>{s.title || 'New Session'}</Text>
+                                <View style={styles.historyCardFooter}>
+                                    <Ionicons name="chatbubbles-outline" size={12} color="#6B7280" />
+                                    <Text style={styles.historyCardFooterText}>{s.messageCount || 0}</Text>
+                                    <Text style={styles.historyCardFooterText}> • </Text>
+                                    <Ionicons name="calendar-outline" size={12} color="#6B7280" />
+                                    <Text style={styles.historyCardFooterText}>{new Date(s.createdAt).toLocaleDateString()}</Text>
+                                </View>
+                            </TouchableOpacity>
+                        ))
+                    )}
+                </ScrollView>
+            </Animated.View>
+        </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
-    root: { flex: 1 },
-    flex: { flex: 1 },
-
-    // ── Header (Shared)
-    header: { paddingBottom: Spacing.xl },
-    headerCompact: { paddingBottom: Spacing.md },
-    headerInner: {
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        paddingHorizontal: Spacing.lg, paddingTop: Spacing.xs, paddingBottom: Spacing.xs,
+    root: {
+        flex: 1,
+        backgroundColor: '#F5F6FA',
     },
-    headerSuper: { fontSize: FontSize.xs, fontWeight: '600', color: Colors.canary, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
-    headerTitle: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.snow },
-
-    // ── Chat Header
-    headerCenter: { flex: 1, marginRight: Spacing.md },
-    headerTopic: { fontSize: FontSize.md, fontWeight: '700', color: Colors.snow },
-    iconBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-    
-    headerMode: { fontSize: FontSize.xs, color: Colors.snow, opacity: 0.8, marginTop: 2 },
-    
-    // ── Mode Selector (Active) -> Mode Cards (Empty State)
-    startModesContainer: {
-        width: '100%', maxWidth: 500, alignSelf: 'center', gap: Spacing.md,
-        paddingHorizontal: Spacing.lg,
+    flex: {
+        flex: 1,
     },
-    startModeCard: {
-        flexDirection: 'row', alignItems: 'center', padding: Spacing.lg,
-        borderRadius: Radius.lg, borderWidth: 1,
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 20,
+        paddingTop: 12,
+        paddingBottom: 16,
+        backgroundColor: '#F5F6FA',
     },
-    startModeIcon: {
-        width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center',
-        marginRight: Spacing.md,
+    headerLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
-    startModeBody: { flex: 1 },
-    startModeTitle: { fontSize: FontSize.md, fontWeight: '700', marginBottom: 2 },
-    startModeDesc: { fontSize: FontSize.xs, color: Colors.silver },
-
-    // ── Unified State
-    unifiedScrollContent: { paddingBottom: Spacing['3xl'], paddingTop: Spacing.md },
-    centeredInputSection: { alignItems: 'center', marginBottom: Spacing.xl, marginTop: Spacing.sm },
-    emptyTitle: { fontSize: FontSize['2xl'], fontWeight: '800', marginBottom: Spacing.lg, textAlign: 'center' },
-    
-    // ── History & Filters
-    historyHeader: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.sm, width: '100%', maxWidth: 500, alignSelf: 'center' },
-    historyHeaderText: { fontSize: FontSize.sm, fontWeight: 'bold', letterSpacing: 1.2, textTransform: 'uppercase' },
-    filterContainer: { paddingBottom: Spacing.md, width: '100%', maxWidth: 500, alignSelf: 'center' },
-    filterScroll: { paddingHorizontal: Spacing.lg, gap: Spacing.sm },
-    filterChip: { paddingHorizontal: Spacing.md, paddingVertical: 8, borderRadius: 20, height: 36, alignItems: 'center', justifyContent: 'center' },
-    filterChipText: { fontSize: FontSize.sm, fontWeight: '600' },
-
-    historyItemWrapper: { width: '100%', maxWidth: 500, alignSelf: 'center', paddingHorizontal: Spacing.lg, marginBottom: Spacing.md },
-    historyItemCard: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.md, paddingLeft: Spacing.lg, paddingRight: Math.max(12, Spacing.lg), borderRadius: Radius.lg, borderWidth: 1, ...Shadow.sm },
-    historyItemBody: { flex: 1 },
-    historyCardTitle: { fontSize: FontSize.md, fontWeight: 'bold', marginBottom: 6 },
-    subtitleRow: { flexDirection: 'row', alignItems: 'center' },
-    subtitleIcon: { marginRight: 4 },
-    subtitleText: { fontWeight: '600', fontSize: FontSize.xs, color: Colors.silver },
-    deleteBtn: { paddingLeft: Spacing.md },
-
-    // ── Chat View
-    listContent: { paddingTop: Spacing.lg, paddingBottom: Spacing.md },
-
-    // ── Document Badge
-    activeDocBadge: {
-        flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start',
-        paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: Radius.full,
-        marginBottom: Spacing.xs, gap: Spacing.xs,
+    avatarPlaceholder: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: '#EEF2FF',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
     },
-    activeDocName: { fontSize: FontSize.xs, color: Colors.hexawareBlue, fontWeight: '600', maxWidth: 200 },
-    
-    // ── Chat Input Bar
-    chatInputContainer: { borderTopWidth: 1, paddingTop: Spacing.sm, paddingHorizontal: Spacing.lg },
+    headerTextStack: {
+        justifyContent: 'center',
+    },
+    greetingLabel: {
+        fontSize: 12,
+        color: '#6B7280',
+    },
+    botName: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#1E1B4B',
+        marginTop: 2,
+    },
+    botSubtitle: {
+        fontSize: 12,
+        color: '#6B7280',
+        fontStyle: 'italic',
+        marginTop: 1,
+    },
+    historyBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        backgroundColor: '#FFFFFF',
+    },
+    historyBtnText: {
+        fontSize: 12,
+        color: '#6B7280',
+        marginLeft: 4,
+        fontWeight: '500',
+    },
+    scrollContent: {
+        paddingHorizontal: 20,
+        paddingBottom: 24,
+    },
+    welcomeCard: {
+        width: '100%',
+        borderRadius: 20,
+        padding: 20,
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        marginBottom: 24,
+    },
+    welcomeContent: {
+        flex: 1,
+    },
+    welcomeTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#FFFFFF',
+        marginBottom: 4,
+    },
+    welcomeSubtitle: {
+        fontSize: 14,
+        color: 'rgba(255,255,255,0.8)',
+        marginBottom: 16,
+    },
+    quickActionChips: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    chip: {
+        backgroundColor: 'rgba(255,255,255,0.25)',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+    },
+    chipText: {
+        color: '#FFFFFF',
+        fontSize: 12,
+    },
+    robotIllustration: {
+        marginLeft: 16,
+        marginTop: 8,
+    },
+    dateSeparator: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    line: {
+        flex: 1,
+        height: 1,
+        backgroundColor: '#E5E7EB',
+    },
+    dateText: {
+        marginHorizontal: 12,
+        fontSize: 12,
+        color: '#6B7280',
+    },
+    inputBarContainer: {
+        padding: 16,
+        backgroundColor: '#F5F6FA',
+    },
     editingBanner: {
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
-        borderTopLeftRadius: Radius.md, borderTopRightRadius: Radius.md,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        backgroundColor: '#EEF2FF',
         borderLeftWidth: 4,
-        marginBottom: Spacing.xs,
+        borderLeftColor: '#4F46E5',
+        borderTopLeftRadius: 16,
+        borderTopRightRadius: 16,
+        marginBottom: 8,
     },
     editingBannerContent: {
-        flexDirection: 'row', alignItems: 'center', flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
     },
-    chatInputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.sm, paddingBottom: Spacing.sm },
-    attachBtn: { width: 44, height: 46, alignItems: 'center', justifyContent: 'center' },
-    chatInput: {
-        flex: 1, borderRadius: Radius.lg, borderWidth: 1.5,
-        paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
-        fontSize: FontSize.md, maxHeight: 180, minHeight: 46,
+    inputWrapper: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 30,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        paddingLeft: 12,
+        paddingRight: 8,
+        height: 56,
     },
-    chatSendBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+    addBtn: {
+        padding: 4,
+        marginRight: 4,
+    },
+    attachMenu: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#EEF2FF',
+        borderRadius: 20,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        marginRight: 8,
+        gap: 8,
+    },
+    attachIconBtn: {
+        padding: 4,
+    },
+    activeDocBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+        backgroundColor: '#EEF2FF',
+        marginBottom: 8,
+        gap: 6,
+    },
+    activeDocName: {
+        fontSize: 12,
+        color: '#4F46E5',
+        fontWeight: '600',
+        maxWidth: 200,
+    },
+    textInput: {
+        flex: 1,
+        fontSize: 14,
+        color: '#1E1B4B',
+    },
+    inputActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    iconBtn: {
+        padding: 4,
+    },
+    sendBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#4F46E5',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginLeft: 4,
+    },
+    // SIDE MENU STYLES
+    overlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.3)',
+        zIndex: 10,
+    },
+    sideMenu: {
+        position: 'absolute',
+        top: 0,
+        bottom: 0,
+        right: 0,
+        width: '80%',
+        maxWidth: 320,
+        backgroundColor: '#FFFFFF',
+        zIndex: 20,
+        elevation: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: -2, height: 0 },
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+    },
+    sideMenuHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: '#E5E7EB',
+        backgroundColor: '#F9FAFB',
+    },
+    sideMenuTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#1E1B4B',
+    },
+    filterScrollContainer: {
+        borderBottomWidth: 1,
+        borderBottomColor: '#E5E7EB',
+        backgroundColor: '#FFFFFF',
+    },
+    filterScrollContent: {
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        gap: 8,
+    },
+    filterChipBtn: {
+        paddingHorizontal: 16,
+        paddingVertical: 6,
+        borderRadius: 16,
+        backgroundColor: '#F3F4F6',
+        borderWidth: 1,
+        borderColor: 'transparent',
+    },
+    filterChipBtnActive: {
+        backgroundColor: '#EEF2FF',
+        borderColor: '#4F46E5',
+    },
+    filterChipText: {
+        fontSize: 12,
+        color: '#4B5563',
+        fontWeight: '500',
+    },
+    filterChipTextActive: {
+        color: '#4F46E5',
+        fontWeight: 'bold',
+    },
+    sideMenuContent: {
+        padding: 16,
+    },
+    emptyHistory: {
+        color: '#9CA3AF',
+        textAlign: 'center',
+        marginTop: 20,
+    },
+    historyItemCard: {
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        borderRadius: 12,
+        padding: 14,
+        marginBottom: 12,
+    },
+    historyCardTitle: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: '#1E1B4B',
+        marginBottom: 8,
+    },
+    historyCardFooter: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    historyCardFooterText: {
+        fontSize: 11,
+        color: '#6B7280',
+        marginLeft: 4,
+    },
 });
