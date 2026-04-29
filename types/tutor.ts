@@ -96,11 +96,17 @@ export interface RegeneratedChatResponse {
 
 export interface ChatMessage {
     id: string;
-    role: 'user' | 'assistant';
+    role: 'user' | 'assistant' | 'ai';
     text: string;
+    content?: string;
     timestamp: string;
     tokensUsed?: number;
     feedback?: 'like' | 'dislike';
+    liked?: boolean;
+    disliked?: boolean;
+    isTyping?: boolean;
+    isError?: boolean;
+    lastUserMessage?: string;
     chatId?: string;  // Backend chat ID for feedback/regenerate
 }
 

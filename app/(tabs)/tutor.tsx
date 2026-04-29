@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
     View, StyleSheet, ScrollView, TextInput, TouchableOpacity,
-    KeyboardAvoidingView, Platform, Text, SafeAreaView, Animated, Dimensions, ActivityIndicator
+    KeyboardAvoidingView, Platform, Text, SafeAreaView, Animated, Dimensions, ActivityIndicator, Image
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -94,9 +94,12 @@ export default function TutorScreen() {
     };
 
     const modes = [
-        { label: "Resolve", value: "normal" as const },
-        { label: "Mastery", value: "teaching" as const },
-        { label: "Navigate", value: "guiding" as const }
+        { label: "Explain concepts", value: "teaching" as const },
+        { label: "Solve concepts", value: "guiding" as const },
+        { label: "Quiz me", value: "normal" as const },
+        { label: "Career guidance", value: "normal" as const },
+        { label: "Recommend courses", value: "normal" as const },
+        { label: "Summarize", value: "normal" as const }
     ];
 
     return (
@@ -109,12 +112,11 @@ export default function TutorScreen() {
                 <View style={styles.header}>
                     <View style={styles.headerLeft}>
                         <View style={styles.avatarPlaceholder}>
-                            <Ionicons name="hardware-chip" size={24} color="#4F46E5" />
+                            <Image source={require('../../assets/botchat.png')} style={{ width: 44, height: 44 }} resizeMode="contain" />
                         </View>
                         <View style={styles.headerTextStack}>
-                            <Text style={styles.greetingLabel}>hello</Text>
-                            <Text style={styles.botName}>Ask Lumi Coach</Text>
-                            <Text style={styles.botSubtitle}>Your AI learning companion ✨</Text>
+                            <Text style={styles.botName}>Lumi Coach</Text>
+                            <Text style={styles.botSubtitle}>Your AI learning coach 🤖</Text>
                         </View>
                     </View>
                     <TouchableOpacity style={styles.historyBtn} onPress={() => setIsHistoryOpen(true)}>
@@ -126,10 +128,10 @@ export default function TutorScreen() {
                 {/* SCROLLABLE CHAT AREA */}
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                     {/* WELCOME CARD */}
-                    <LinearGradient colors={['#4F46E5', '#7C3AED']} style={styles.welcomeCard} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+                    <LinearGradient colors={['#CBD0E5', '#E2E6F2']} style={[styles.welcomeCard, { borderColor: '#8088A7', borderWidth: 1 }]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
                         <View style={styles.welcomeContent}>
-                            <Text style={styles.welcomeTitle}>Hi {username}! 👋</Text>
-                            <Text style={styles.welcomeSubtitle}>How can I help you learn today?</Text>
+                            <Text style={styles.welcomeTitle}>Hi {username}!</Text>
+                            <Text style={styles.welcomeSubtitle}>How can I help you?</Text>
                             <View style={styles.quickActionChips}>
                                 {modes.map(m => (
                                     <TouchableOpacity key={m.label} style={styles.chip} onPress={() => startNewSession(m.value)}>
@@ -139,7 +141,7 @@ export default function TutorScreen() {
                             </View>
                         </View>
                         <View style={styles.robotIllustration}>
-                            <Ionicons name="planet-outline" size={80} color="rgba(255,255,255,0.15)" />
+                            <Image source={require('../../assets/botwave.png')} style={{ width: 140, height: 160 }} resizeMode="contain" />
                         </View>
                     </LinearGradient>
 
@@ -163,7 +165,7 @@ export default function TutorScreen() {
                 <View style={styles.inputBarContainer}>
                     {activeDocumentId && (
                         <View style={styles.activeDocBadge}>
-                            <Ionicons name="document-text" size={14} color="#4F46E5" />
+                            <Ionicons name="document-text" size={14} color="#3C2CDA" />
                             <Text style={styles.activeDocName} numberOfLines={1}>{activeDocumentName}</Text>
                             <TouchableOpacity onPress={clearActiveDocument}>
                                 <Ionicons name="close-circle" size={16} color="#6B7280" />
@@ -173,9 +175,9 @@ export default function TutorScreen() {
                     {editingMessageId && (
                         <View style={styles.editingBanner}>
                             <View style={styles.editingBannerContent}>
-                                <Ionicons name="pencil" size={16} color="#4F46E5" />
+                                <Ionicons name="pencil" size={16} color="#3C2CDA" />
                                 <View style={{ marginLeft: 8, flex: 1 }}>
-                                    <Text style={{ color: '#4F46E5', fontSize: 12, fontWeight: 'bold' }}>Editing Message</Text>
+                                    <Text style={{ color: '#3C2CDA', fontSize: 12, fontWeight: 'bold' }}>Editing Message</Text>
                                     <Text numberOfLines={1} style={{ color: '#6B7280', fontSize: 12 }}>
                                         {messages.find(m => m.id === editingMessageId)?.text}
                                     </Text>
@@ -197,16 +199,16 @@ export default function TutorScreen() {
                         {isAttachMenuOpen && (
                             <View style={styles.attachMenu}>
                                 <TouchableOpacity style={styles.attachIconBtn}>
-                                    <Ionicons name="image-outline" size={22} color="#4F46E5" />
+                                    <Ionicons name="image-outline" size={22} color="#3C2CDA" />
                                 </TouchableOpacity>
                                 <TouchableOpacity style={styles.attachIconBtn}>
-                                    <Ionicons name="mic-outline" size={22} color="#4F46E5" />
+                                    <Ionicons name="mic-outline" size={22} color="#3C2CDA" />
                                 </TouchableOpacity>
                                 <TouchableOpacity style={styles.attachIconBtn} onPress={handleAttach} disabled={isUploading}>
                                     {isUploading ? (
-                                        <ActivityIndicator size="small" color="#4F46E5" />
+                                        <ActivityIndicator size="small" color="#3C2CDA" />
                                     ) : (
-                                        <Ionicons name="document-outline" size={22} color="#4F46E5" />
+                                        <Ionicons name="document-outline" size={22} color="#3C2CDA" />
                                     )}
                                 </TouchableOpacity>
                             </View>
@@ -297,7 +299,7 @@ export default function TutorScreen() {
 const styles = StyleSheet.create({
     root: {
         flex: 1,
-        backgroundColor: '#F5F6FA',
+        backgroundColor: '#F4EFF2',
     },
     flex: {
         flex: 1,
@@ -309,7 +311,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         paddingTop: 12,
         paddingBottom: 16,
-        backgroundColor: '#F5F6FA',
+        backgroundColor: '#F4EFF2',
     },
     headerLeft: {
         flexDirection: 'row',
@@ -318,10 +320,6 @@ const styles = StyleSheet.create({
     avatarPlaceholder: {
         width: 44,
         height: 44,
-        borderRadius: 22,
-        backgroundColor: '#EEF2FF',
-        alignItems: 'center',
-        justifyContent: 'center',
         marginRight: 12,
     },
     headerTextStack: {
@@ -334,13 +332,12 @@ const styles = StyleSheet.create({
     botName: {
         fontSize: 18,
         fontWeight: 'bold',
-        color: '#1E1B4B',
+        color: '#040D43',
         marginTop: 2,
     },
     botSubtitle: {
         fontSize: 12,
-        color: '#6B7280',
-        fontStyle: 'italic',
+        color: '#8088A7',
         marginTop: 1,
     },
     historyBtn: {
@@ -365,45 +362,57 @@ const styles = StyleSheet.create({
     },
     welcomeCard: {
         width: '100%',
-        borderRadius: 20,
+        borderRadius: 16,
         padding: 20,
         flexDirection: 'row',
         alignItems: 'flex-start',
         justifyContent: 'space-between',
         marginBottom: 24,
+        overflow: 'hidden',
     },
     welcomeContent: {
         flex: 1,
+        zIndex: 1,
     },
     welcomeTitle: {
-        fontSize: 20,
+        fontSize: 22,
         fontWeight: 'bold',
-        color: '#FFFFFF',
+        color: '#040D43',
         marginBottom: 4,
     },
     welcomeSubtitle: {
-        fontSize: 14,
-        color: 'rgba(255,255,255,0.8)',
+        fontSize: 12,
+        color: '#040D43',
         marginBottom: 16,
+        fontWeight: '500',
     },
     quickActionChips: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: 8,
+        paddingRight: 140,
     },
     chip: {
-        backgroundColor: 'rgba(255,255,255,0.25)',
+        backgroundColor: '#F8F8F9',
         paddingHorizontal: 12,
         paddingVertical: 6,
         borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#FFFFFF88',
     },
     chipText: {
-        color: '#FFFFFF',
-        fontSize: 12,
+        color: '#040D43',
+        fontSize: 10,
+        fontWeight: '500',
     },
     robotIllustration: {
-        marginLeft: 16,
-        marginTop: 8,
+        position: 'absolute',
+        right: 10,
+        top: 0,
+        bottom: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 0,
     },
     dateSeparator: {
         flexDirection: 'row',
@@ -422,7 +431,7 @@ const styles = StyleSheet.create({
     },
     inputBarContainer: {
         padding: 16,
-        backgroundColor: '#F5F6FA',
+        backgroundColor: '#F4EFF2',
     },
     editingBanner: {
         flexDirection: 'row',
@@ -430,9 +439,9 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         paddingHorizontal: 16,
         paddingVertical: 12,
-        backgroundColor: '#EEF2FF',
+        backgroundColor: '#F4EFF2',
         borderLeftWidth: 4,
-        borderLeftColor: '#4F46E5',
+        borderLeftColor: '#3C2CDA',
         borderTopLeftRadius: 16,
         borderTopRightRadius: 16,
         marginBottom: 8,
@@ -445,13 +454,18 @@ const styles = StyleSheet.create({
     inputWrapper: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#F8F8F9',
         borderRadius: 30,
         borderWidth: 1,
-        borderColor: '#E5E7EB',
+        borderColor: '#CBD0E5',
         paddingLeft: 12,
         paddingRight: 8,
         height: 56,
+        shadowColor: '#535983',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
     },
     addBtn: {
         padding: 4,
@@ -460,7 +474,7 @@ const styles = StyleSheet.create({
     attachMenu: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#EEF2FF',
+        backgroundColor: '#F4EFF2',
         borderRadius: 20,
         paddingHorizontal: 8,
         paddingVertical: 4,
@@ -477,13 +491,13 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 6,
         borderRadius: 16,
-        backgroundColor: '#EEF2FF',
+        backgroundColor: '#F4EFF2',
         marginBottom: 8,
         gap: 6,
     },
     activeDocName: {
         fontSize: 12,
-        color: '#4F46E5',
+        color: '#3C2CDA',
         fontWeight: '600',
         maxWidth: 200,
     },
@@ -504,7 +518,7 @@ const styles = StyleSheet.create({
         width: 36,
         height: 36,
         borderRadius: 18,
-        backgroundColor: '#4F46E5',
+        backgroundColor: '#3C2CDA',
         alignItems: 'center',
         justifyContent: 'center',
         marginLeft: 4,
@@ -563,8 +577,8 @@ const styles = StyleSheet.create({
         borderColor: 'transparent',
     },
     filterChipBtnActive: {
-        backgroundColor: '#EEF2FF',
-        borderColor: '#4F46E5',
+        backgroundColor: '#F4EFF2',
+        borderColor: '#3C2CDA',
     },
     filterChipText: {
         fontSize: 12,
@@ -572,7 +586,7 @@ const styles = StyleSheet.create({
         fontWeight: '500',
     },
     filterChipTextActive: {
-        color: '#4F46E5',
+        color: '#3C2CDA',
         fontWeight: 'bold',
     },
     sideMenuContent: {

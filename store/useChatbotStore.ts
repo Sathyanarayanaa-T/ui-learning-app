@@ -98,7 +98,7 @@ export const useChatbotStore = create<ChatbotState>((set, get) => ({
             const introMsg: ChatMessage = {
                 id: mkId(),
                 role: 'assistant',
-                text: "Hi! I'm HexaLearn. Ask me anything — I'm here to help!",
+                text: "Hi! I'm Ask Lumi. Ask me anything — I'm here to help!",
                 timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             };
 

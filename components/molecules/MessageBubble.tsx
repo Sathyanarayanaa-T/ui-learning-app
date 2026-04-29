@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useColors } from '../../hooks/useColors';
@@ -55,7 +55,7 @@ const TypingDots = () => {
     );
 };
 
-export function MessageBubble({ message, onLike, onDislike, onRetry, onRegenerate }: MessageBubbleProps) {
+export function MessageBubble({ message, onLike, onDislike, onRetry, onRegenerate, onEdit }: MessageBubbleProps) {
     const isUser = message.role === 'user';
     const colors = useColors();
 
@@ -73,7 +73,7 @@ export function MessageBubble({ message, onLike, onDislike, onRetry, onRegenerat
                 onPress={() => onRetry && message.lastUserMessage && onRetry(message.lastUserMessage)}
             >
                 <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>AI</Text>
+                    <Image source={require('../../assets/botchat.png')} style={{ width: 32, height: 32, borderRadius: 16 }} resizeMode="cover" />
                 </View>
                 <View style={[styles.bubble, styles.aiBubble, styles.errorBubble, { backgroundColor: colors.white }]}>
                     <Text style={[styles.errorText, { color: colors.error }]}>Something went wrong. Tap to retry.</Text>
@@ -86,7 +86,7 @@ export function MessageBubble({ message, onLike, onDislike, onRetry, onRegenerat
         return (
             <View style={styles.userRow}>
                 <View style={styles.userBubbleContainer}>
-                    <View style={[styles.bubble, styles.userBubble]}>
+                    <View style={[styles.bubble, styles.userBubble, { backgroundColor: colors.hexawareBlue }]}>
                         <Text style={styles.userText}>{message.text || message.content}</Text>
                     </View>
                     <View style={styles.userFooter}>
@@ -105,10 +105,10 @@ export function MessageBubble({ message, onLike, onDislike, onRetry, onRegenerat
     return (
         <View style={styles.aiRow}>
             <View style={styles.avatar}>
-                <Text style={styles.avatarText}>AI</Text>
+                <Image source={require('../../assets/botchat.png')} style={{ width: 32, height: 32, borderRadius: 16 }} resizeMode="cover" />
             </View>
             <View style={styles.aiBubbleContainer}>
-                <View style={[styles.bubble, styles.aiBubble, { backgroundColor: colors.white }]}>
+                <View style={[styles.bubble, styles.aiBubble, { backgroundColor: colors.snow, borderColor: colors.borderLight, borderWidth: 1 }]}>
                     {message.isTyping ? (
                         <TypingDots />
                     ) : (
@@ -177,11 +177,11 @@ const styles = StyleSheet.create({
         width: 32,
         height: 32,
         borderRadius: 16,
-        backgroundColor: '#7B6CF6',
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 8,
         marginTop: 4,
+        flexShrink: 0,
     },
     avatarText: {
         color: '#FFFFFF',
@@ -193,17 +193,10 @@ const styles = StyleSheet.create({
         borderRadius: 16,
     },
     userBubble: {
-        backgroundColor: '#3D3BF3',
         borderBottomRightRadius: 4,
     },
     aiBubble: {
-        backgroundColor: '#FFFFFF',
         borderBottomLeftRadius: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-        elevation: 1,
     },
     errorBubble: {
         backgroundColor: '#FFEBEE',

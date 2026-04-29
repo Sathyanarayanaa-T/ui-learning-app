@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useTutorStore } from '../../store/useTutorStore';
@@ -38,8 +38,8 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message }) => {
         <View style={[styles.row, isUser ? styles.rowUser : styles.rowAI]}>
             {/* Avatar */}
             {!isUser && (
-                <View style={[styles.avatar, { backgroundColor: colors.hexawareBlue }]}>
-                    <Ionicons name="bulb" size={16} color="#FFF" />
+                <View style={styles.avatar}>
+                    <Image source={require('../../assets/botchat.png')} style={{ width: 32, height: 32, borderRadius: 16 }} resizeMode="cover" />
                 </View>
             )}
 
