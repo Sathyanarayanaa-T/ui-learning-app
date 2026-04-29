@@ -11,7 +11,7 @@ import { TypingIndicator } from '../../components/molecules/TypingIndicator';
 import { useTutorStore } from '../../store/useTutorStore';
 import { useAppStore } from '../../store/useAppStore';
 
-export default function TutorScreen() {
+export default function TutorScreen({ isEmbedded, onClose }: any) {
     const { 
         startNewSession, sendMessage, messages, sessions, loadSessions, restoreSession,
         isTyping, editingMessageId, setEditingMessageId, editMessage,
@@ -119,10 +119,16 @@ export default function TutorScreen() {
                             <Text style={styles.botSubtitle}>Your AI learning coach 🤖</Text>
                         </View>
                     </View>
-                    <TouchableOpacity style={styles.historyBtn} onPress={() => setIsHistoryOpen(true)}>
-                        <Ionicons name="time-outline" size={14} color="#6B7280" />
-                        <Text style={styles.historyBtnText}>History</Text>
-                    </TouchableOpacity>
+                    {isEmbedded ? (
+                        <TouchableOpacity style={{ padding: 8 }} onPress={onClose}>
+                            <Ionicons name="close" size={24} color="#1E1B4B" />
+                        </TouchableOpacity>
+                    ) : (
+                        <TouchableOpacity style={styles.historyBtn} onPress={() => setIsHistoryOpen(true)}>
+                            <Ionicons name="time-outline" size={14} color="#6B7280" />
+                            <Text style={styles.historyBtnText}>History</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
 
                 {/* SCROLLABLE CHAT AREA */}
