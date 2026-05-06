@@ -1,4 +1,4 @@
-"""AI Service with Ollama (Primary), Gemini & OpenAI (Fallback) support."""
+"""AI Service with NVIDIA NIM (Primary), Ollama, Gemini & OpenAI (Fallbacks) support."""
 
 from openai import OpenAI, AsyncOpenAI
 from ...core.config import settings
@@ -15,48 +15,49 @@ except ImportError:
 
 
 class AIService:
-    """Service for AI interactions with Ollama (primary), Gemini, and OpenAI (fallbacks)."""
+    """Service for AI interactions with NVIDIA NIM Kimi-K2 (EXCLUSIVE - No fallbacks)."""
     
     def __init__(self, db_session=None):
-        self.use_ollama = False
-        self.use_gemini = False
-        self.gemini_model = None
-        self.openai_client = None
-        self.ollama_base_url = settings.OLLAMA_BASE_URL
-        self.ollama_model = settings.OLLAMA_MODEL
+        self.use_nvidia_nim = False
+        
+        # NVIDIA NIM Configuration (EXCLUSIVE)
+        self.nvidia_nim_api_key = settings.NVIDIA_NIM_API_KEY
+        self.nvidia_nim_base_url = settings.NVIDIA_NIM_BASE_URL
+        self.nvidia_nim_model = settings.NVIDIA_NIM_MODEL
+        self.nvidia_nim_enable_thinking = settings.NVIDIA_NIM_ENABLE_THINKING
         self.db_session = db_session
         
-        # Initialize Ollama (Local - No API key needed!)
-        if self._check_ollama_available():
-            self.use_ollama = True
-            print(f"[OK] Ollama API initialized with model: {self.ollama_model}")
-            print(f"     Endpoint: {self.ollama_base_url}")
+        # Initialize NVIDIA NIM (EXCLUSIVE - Only provider)
+        if self._check_nvidia_nim_available():
+            self.use_nvidia_nim = True
+            print(f"[OK] NVIDIA NIM API initialized with model: {self.nvidia_nim_model}")
+            print(f"     Endpoint: {self.nvidia_nim_base_url}")
+            print(f"     Extended Thinking: {self.nvidia_nim_enable_thinking}")
+            print(f"[INFO] EXCLUSIVE MODE: Only NVIDIA NIM Kimi-K2 is used (no fallbacks)")
         else:
-            print(f"[WARNING] Ollama not available at {self.ollama_base_url}")
-            print("     Make sure Ollama is running: https://ollama.ai/")
-            print("     You can download models with: ollama pull mistral")
-        
-        # Initialize Gemini as fallback if available
-        if GEMINI_AVAILABLE and settings.GEMINI_API_KEY:
-            try:
-                genai.configure(api_key=settings.GEMINI_API_KEY)
-                self.gemini_model = genai.GenerativeModel(settings.GEMINI_MODEL)
-                self.use_gemini = True
-                print(f"[OK] Gemini API initialized (fallback)")
-            except Exception as e:
-                print(f"[WARNING] Gemini initialization failed: {e}")
-                self.use_gemini = False
-        
-        # Initialize OpenAI as final fallback
+            print(f"[ERROR] NVIDIA NIM not available. Cannot proceed.")
+            print(f"[ERROR] API Key may not be set or is invalid.")
+            print(f"[ERROR] Set NVIDIA_NIM_API_KEY environment variable with your valid API key")
+            raise Exception("NVIDIA NIM API is required and not available. Please check your API key.")
+    
+    def _check_nvidia_nim_available(self) -> bool:
+        """Check if NVIDIA NIM API key is configured."""
+        if not self.nvidia_nim_api_key:
+            return False
         try:
-            self.openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
-            print(f"[OK] OpenAI API available (final fallback)")
+            # Simple check by testing headers
+            headers = {
+                "Authorization": f"Bearer {self.nvidia_nim_api_key}",
+                "Accept": "application/json"
+            }
+            response = requests.get(
+                f"{self.nvidia_nim_base_url}/models",
+                headers=headers,
+                timeout=5
+            )
+            return response.status_code in [200, 401]  # 401 means key is invalid, but API exists
         except Exception as e:
-            self.openai_client = None
-            print(f"[WARNING] OpenAI client initialization failed: {e}")
-        
-        self.temperature = settings.OPENAI_TEMPERATURE
-        self.max_tokens = settings.OPENAI_MAX_TOKENS
+            return False
     
     def _check_ollama_available(self) -> bool:
         """Check if Ollama service is running and accessible."""
@@ -67,191 +68,122 @@ class AIService:
             return False
     
     def chat(self, system_prompt: str, messages: list, user_message: str = None) -> str:
-        """Send a chat request to Ollama (primary) or fallback providers."""
+        """Send a chat request to NVIDIA NIM Kimi-K2 (EXCLUSIVE)."""
         
-        # Try Ollama first (local, no API key needed)
-        if self.use_ollama:
-            try:
-                # Build conversation with system prompt
-                if user_message:
-                    conversation_messages = prompt_builder.build_conversation_messages(
-                        system_prompt, messages, user_message
-                    )
-                else:
-                    conversation_messages = [{"role": "system", "content": system_prompt}] + messages
-                
-                # Use OpenAI-compatible API endpoint for Ollama
-                response = requests.post(
-                    f"{self.ollama_base_url}/v1/chat/completions",
-                    json={
-                        "model": self.ollama_model,
-                        "messages": conversation_messages,
-                        "temperature": self.temperature,
-                        "max_tokens": self.max_tokens,
-                        "stream": False
-                    },
-                    timeout=120
+        if not self.use_nvidia_nim:
+            raise Exception("NVIDIA NIM Kimi-K2 is not available. Please check your API key configuration.")
+        
+        try:
+            # Build conversation with system prompt
+            if user_message:
+                conversation_messages = prompt_builder.build_conversation_messages(
+                    system_prompt, messages, user_message
                 )
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    return result["choices"][0]["message"]["content"]
-                else:
-                    raise Exception(f"Ollama returned status {response.status_code}")
+            else:
+                conversation_messages = [{"role": "system", "content": system_prompt}] + messages
             
-            except Exception as e:
-                print(f"Ollama error: {e}, trying Gemini fallback...")
-        
-        # Try Gemini next
-        if self.use_gemini:
-            try:
-                if user_message:
-                    conversation_messages = prompt_builder.build_conversation_messages(
-                        system_prompt, messages, user_message
-                    )
-                else:
-                    conversation_messages = [{"role": "system", "content": system_prompt}] + messages
-                
-                user_msg_content = conversation_messages[-1]["content"] if conversation_messages else ""
-                
-                if system_prompt and user_msg_content:
-                    user_msg_content = f"{system_prompt}\n\nUser: {user_msg_content}"
-                
-                response = self.gemini_model.generate_content(
-                    user_msg_content,
-                    generation_config=genai.types.GenerationConfig(
-                        temperature=self.temperature,
-                        max_output_tokens=self.max_tokens,
-                    )
-                )
-                
-                return response.text
+            headers = {
+                "Authorization": f"Bearer {self.nvidia_nim_api_key}",
+                "Accept": "application/json"
+            }
             
-            except Exception as e:
-                print(f"Gemini error: {e}, trying OpenAI fallback...")
-        
-        # Try OpenAI as final fallback
-        if self.openai_client:
-            try:
-                if user_message:
-                    conversation_messages = prompt_builder.build_conversation_messages(
-                        system_prompt, messages, user_message
-                    )
-                else:
-                    conversation_messages = [{"role": "system", "content": system_prompt}] + messages
-                
-                response = self.openai_client.chat.completions.create(
-                    model=settings.OPENAI_MODEL,
-                    messages=conversation_messages,
-                    temperature=self.temperature,
-                    max_tokens=self.max_tokens
-                )
-                
-                return response.choices[0].message.content
+            payload = {
+                "model": self.nvidia_nim_model,
+                "messages": conversation_messages,
+                "max_tokens": settings.OPENAI_MAX_TOKENS,
+                "temperature": settings.OPENAI_TEMPERATURE,
+                "top_p": 1.0,
+                "stream": False
+            }
             
-            except Exception as e:
-                return f"Error: {str(e)}"
+            # Add thinking capability if enabled
+            if self.nvidia_nim_enable_thinking:
+                payload["chat_template_kwargs"] = {"thinking": True}
+            
+            response = requests.post(
+                f"{self.nvidia_nim_base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=120
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                return result["choices"][0]["message"]["content"]
+            else:
+                error_detail = response.text
+                raise Exception(f"NVIDIA NIM returned status {response.status_code}: {error_detail}")
         
-        return "Error: No AI service available (Ollama, Gemini, and OpenAI all unavailable)"
+        except Exception as e:
+            error_msg = f"NVIDIA NIM Kimi-K2 Error: {str(e)}"
+            print(error_msg)
+            raise Exception(error_msg)
     
     async def chat_stream(self, system_prompt: str, messages: list, user_message: str = None):
-        """Stream chat response from Ollama or fallback providers."""
+        """Stream chat response from NVIDIA NIM Kimi-K2 (EXCLUSIVE)."""
         
-        # Try Ollama first (local streaming)
-        if self.use_ollama:
-            try:
-                if user_message:
-                    conversation_messages = prompt_builder.build_conversation_messages(
-                        system_prompt, messages, user_message
-                    )
-                else:
-                    conversation_messages = [{"role": "system", "content": system_prompt}] + messages
-                
-                response = requests.post(
-                    f"{self.ollama_base_url}/v1/chat/completions",
-                    json={
-                        "model": self.ollama_model,
-                        "messages": conversation_messages,
-                        "temperature": self.temperature,
-                        "max_tokens": self.max_tokens,
-                        "stream": True
-                    },
-                    timeout=120,
-                    stream=True
+        if not self.use_nvidia_nim:
+            raise Exception("NVIDIA NIM Kimi-K2 is not available. Please check your API key configuration.")
+        
+        try:
+            if user_message:
+                conversation_messages = prompt_builder.build_conversation_messages(
+                    system_prompt, messages, user_message
                 )
-                
-                if response.status_code == 200:
-                    for line in response.iter_lines():
-                        if line:
-                            try:
-                                data = json.loads(line.decode('utf-8').replace('data: ', ''))
+            else:
+                conversation_messages = [{"role": "system", "content": system_prompt}] + messages
+            
+            headers = {
+                "Authorization": f"Bearer {self.nvidia_nim_api_key}",
+                "Accept": "text/event-stream"
+            }
+            
+            payload = {
+                "model": self.nvidia_nim_model,
+                "messages": conversation_messages,
+                "max_tokens": settings.OPENAI_MAX_TOKENS,
+                "temperature": settings.OPENAI_TEMPERATURE,
+                "top_p": 1.0,
+                "stream": True
+            }
+            
+            # Add thinking capability if enabled
+            if self.nvidia_nim_enable_thinking:
+                payload["chat_template_kwargs"] = {"thinking": True}
+            
+            response = requests.post(
+                f"{self.nvidia_nim_base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=120,
+                stream=True
+            )
+            
+            if response.status_code == 200:
+                for line in response.iter_lines():
+                    if line:
+                        try:
+                            line_str = line.decode('utf-8') if isinstance(line, bytes) else line
+                            if line_str.startswith('data: '):
+                                data_str = line_str[6:]  # Remove 'data: ' prefix
+                                if data_str == '[DONE]':
+                                    break
+                                data = json.loads(data_str)
                                 if "choices" in data and len(data["choices"]) > 0:
                                     delta = data["choices"][0].get("delta", {})
                                     if "content" in delta:
                                         yield delta["content"]
-                            except:
-                                pass
-                    return
-                else:
-                    raise Exception(f"Ollama streaming returned status {response.status_code}")
-            
-            except Exception as e:
-                print(f"Ollama streaming error: {e}")
-        
-        # Try Gemini streaming if available
-        if self.use_gemini:
-            try:
-                if user_message:
-                    conversation_messages = prompt_builder.build_conversation_messages(
-                        system_prompt, messages, user_message
-                    )
-                else:
-                    conversation_messages = [{"role": "system", "content": system_prompt}] + messages
-                
-                user_msg_content = conversation_messages[-1]["content"] if conversation_messages else ""
-                if system_prompt and user_msg_content:
-                    user_msg_content = f"{system_prompt}\n\nUser: {user_msg_content}"
-                
-                response = self.gemini_model.generate_content(
-                    user_msg_content,
-                    stream=True,
-                    generation_config=genai.types.GenerationConfig(
-                        temperature=self.temperature,
-                        max_output_tokens=self.max_tokens,
-                    )
-                )
-                
-                for chunk in response:
-                    if chunk.text:
-                        yield chunk.text
+                        except Exception as e:
+                            print(f"Error parsing NVIDIA NIM stream: {e}")
+                            pass
                 return
-            except Exception as e:
-                print(f"Gemini streaming error: {e}")
+            else:
+                raise Exception(f"NVIDIA NIM streaming returned status {response.status_code}: {response.text}")
         
-        # Fallback to OpenAI streaming
-        if self.openai_client:
-            try:
-                if user_message:
-                    conversation_messages = prompt_builder.build_conversation_messages(
-                        system_prompt, messages, user_message
-                    )
-                else:
-                    conversation_messages = [{"role": "system", "content": system_prompt}] + messages
-                
-                stream = self.openai_client.chat.completions.create(
-                    model=settings.OPENAI_MODEL,
-                    messages=conversation_messages,
-                    temperature=self.temperature,
-                    max_tokens=self.max_tokens,
-                    stream=True
-                )
-                
-                for chunk in stream:
-                    if chunk.choices[0].delta.content:
-                        yield chunk.choices[0].delta.content
-            
-            except Exception as e:
-                yield f"Error: {str(e)}"
+        except Exception as e:
+            error_msg = f"NVIDIA NIM Kimi-K2 Streaming Error: {str(e)}"
+            print(error_msg)
+            yield error_msg
     
     def get_embedding(self, text: str) -> list:
         """Get embeddings for text (for RAG use cases)."""
@@ -267,25 +199,8 @@ class AIService:
             return None
     
     def validate_api_key(self) -> bool:
-        """Validate that at least one AI service is available."""
-        if self.use_ollama:
-            return True  # Ollama doesn't need validation
-        
-        if self.use_gemini:
-            try:
-                test_response = self.gemini_model.generate_content("test")
-                return bool(test_response.text)
-            except Exception as e:
-                print(f"Gemini validation failed: {e}")
-        
-        if self.openai_client:
-            try:
-                self.openai_client.models.list()
-                return True
-            except Exception as e:
-                print(f"OpenAI validation failed: {e}")
-        
-        return False
+        """Validate that NVIDIA NIM is available (EXCLUSIVE requirement)."""
+        return self.use_nvidia_nim
     
     def transcribe_audio(self, audio_file_path: str) -> str:
         """Transcribe audio file to text using OpenAI Whisper."""

@@ -16,7 +16,13 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./app.db"
     
     # ============ AI Services Configuration ============
-    # Ollama (Local - Primary)
+    # NVIDIA NIM Cloud (Primary)
+    NVIDIA_NIM_API_KEY: str = ""
+    NVIDIA_NIM_BASE_URL: str = "https://integrate.api.nvidia.com/v1"
+    NVIDIA_NIM_MODEL: str = "moonshotai/kimi-k2.6"
+    NVIDIA_NIM_ENABLE_THINKING: bool = True
+    
+    # Ollama (Local - Fallback)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "mistral"  # or "llama2", "neural-chat", etc.
     
@@ -34,7 +40,7 @@ class Settings(BaseSettings):
     ELEVENLABS_API_KEY: str = ""  # Optional: for advanced TTS
     
     # ============ Chat Behavior Configuration ============
-    MAX_CONTEXT_MESSAGES: int = 5  # Last 5 messages for context
+    MAX_CONTEXT_MESSAGES: int = 10  # Last 10 messages for context
     SESSION_TIMEOUT: int = 3600  # 1 hour in seconds
     
     # ============ Voice Configuration ============
