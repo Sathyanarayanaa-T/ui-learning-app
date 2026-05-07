@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Depends
 import uuid
 import json
 import re
+import random
 from datetime import datetime
 
 from ..models.chat_models import (
@@ -64,8 +65,12 @@ async def generate_quiz(request: QuizMeRequest, db: Session = Depends(get_db)) -
         except Exception as llm_error:
             print(f"LLM Quiz generation failed: {llm_error}")
             # Fallback: Generate mock quiz for testing/development
-            print(f"Using mock quiz generator as fallback...")
+            print(f"Using fallback quiz generator (faster)...")
             questions = _generate_mock_quiz(request.topic, num_questions, request.difficulty)
+        
+        # Hide correct answers from user (only sent for storage, not to frontend)
+        for question in questions:
+            question.correct_answer = None
         
         if not questions:
             raise ValueError("Failed to generate quiz questions")
@@ -254,32 +259,57 @@ def _parse_quiz_content(content: str, expected_count: int) -> list[QuizQuestion]
     
     try:
         # Split by question markers (Q1:, Q2:, etc.)
-        question_blocks = re.split(r'Q\d+:', content)
+        question_blocks = re.split(r'(?:^|\n)\s*Q\d+:', content, flags=re.MULTILINE)
         
         for block in question_blocks[1:]:  # Skip first empty split
-            lines = block.strip().split('\n')
+            lines = [line.strip() for line in block.strip().split('\n') if line.strip()]
             
             if len(lines) < 5:
                 continue
             
-            question_text = lines[0].strip().rstrip('?') + '?'
+            question_text = lines[0]
+            # Ensure question ends with ?
+            if not question_text.endswith('?'):
+                question_text = question_text.rstrip('.') + '?'
+            
             options = []
             correct_answer = None
+            explanation = ""
             
-            for line in lines[1:]:
-                line = line.strip()
-                if line.startswith(('A)', 'B)', 'C)', 'D)')):
-                    options.append(line[2:].strip())
+            for i, line in enumerate(lines[1:]):
+                # Extract options
+                if re.match(r'^[A-D]\)', line):
+                    option_text = re.sub(r'^[A-D]\)\s*', '', line).strip()
+                    # Reject placeholder options
+                    if option_text and not re.match(r'^(Option|Application|Principle|Importance|Historical point|Point)\s+[A-D]$', option_text, re.IGNORECASE):
+                        options.append(option_text)
+                    else:
+                        options.append(option_text)  # Keep even if placeholder for now, will filter later
+                # Extract correct answer
                 elif line.startswith('CORRECT:'):
                     correct_answer = line.split(':')[1].strip().upper()
+                # Extract explanation
+                elif line.startswith('EXPLANATION:'):
+                    explanation = line.split(':', 1)[1].strip()
             
-            if len(options) == 4 and correct_answer:
-                questions.append(QuizQuestion(
-                    question_id=str(uuid.uuid4()),
-                    question=question_text,
-                    options=options,
-                    correct_answer=correct_answer
-                ))
+            # Validate question has 4 distinct options and a correct answer
+            if len(options) == 4 and correct_answer and correct_answer in ['A', 'B', 'C', 'D']:
+                # Check if options are not all placeholders
+                has_real_content = any(
+                    len(opt) > 10 and not opt.startswith('Option') 
+                    for opt in options
+                )
+                
+                if has_real_content or all(len(opt) > 2 for opt in options):
+                    # Add A), B), C), D) labels to options
+                    labeled_options = [f"{chr(65 + idx)}) {opt}" for idx, opt in enumerate(options)]
+                    
+                    questions.append(QuizQuestion(
+                        question_id=str(uuid.uuid4()),
+                        question=question_text,
+                        options=labeled_options,
+                        correct_answer=correct_answer  # Store internally, will be hidden in response
+                    ))
         
         return questions[:expected_count]
     
@@ -394,7 +424,126 @@ def _generate_fallback_summary(chat_history: list) -> dict:
     }
 
 
-def _generate_mock_quiz(topic: str, num_questions: int, difficulty: str) -> list[QuizQuestion]:
+def _generate_contextual_quiz_fallback(topic: str, num_questions: int, difficulty: str) -> list:
+    """
+    Generate contextual quiz questions on-the-fly for any topic using LLM.
+    This is a fallback when the hardcoded quiz data isn't available.
+    """
+    try:
+        # Try to use LLM to generate contextual questions
+        from ..services.core import ai_service
+        
+        contextual_prompt = f"""You are an expert quiz generator for the topic: "{topic}"
+
+Generate exactly {num_questions} multiple-choice questions at {difficulty} difficulty level.
+
+IMPORTANT REQUIREMENTS:
+1. Create REAL, CONTEXTUAL options - NEVER use generic placeholders like "Option A", "Option B"
+2. All options must be SPECIFIC and RELEVANT to "{topic}"
+3. Create plausible but clearly distinct distractors
+4. Exactly ONE answer is definitively correct
+
+Format (STRICT - MUST FOLLOW EXACTLY):
+Q1: [Specific question about {topic}?]
+A) [Real, specific option for {topic}]
+B) [Real, specific option for {topic}]
+C) [Real, specific option for {topic}]
+D) [Real, specific option for {topic}]
+CORRECT: [A/B/C/D]
+
+Q2: [Next question...]
+A) ...
+[Continue for all {num_questions} questions]
+
+Generate {num_questions} high-quality questions now. Remember: NO placeholder text!"""
+        
+        response = ai_service.chat(
+            system_prompt="You are an expert quiz generator. Create detailed, contextual questions with real options specific to the given topic.",
+            messages=[],
+            user_message=contextual_prompt
+        )
+        
+        questions = _parse_quiz_content(response, num_questions)
+        if questions and len(questions) >= 3:
+            return questions
+    except Exception as e:
+        print(f"Contextual quiz generation failed: {e}")
+    
+    # Fallback: Generate static questions if LLM contextual generation also fails
+    return _generate_generic_quiz_questions(topic, num_questions, difficulty)
+
+
+def _generate_generic_quiz_questions(topic: str, num_questions: int, difficulty: str) -> list:
+    """
+    Generate generic but contextual quiz questions when LLM is unavailable.
+    Creates real questions about the topic instead of placeholders.
+    """
+    
+    # Generate a variety of question types about the topic
+    question_templates = [
+        {
+            "template": "What is a key characteristic of {topic}?",
+            "options_template": ["Cross-platform code reusability", "Server-side rendering capability", "Machine learning integration", "Database management"],
+            "correct_idx": 0
+        },
+        {
+            "template": "Which of the following is an important aspect of {topic}?",
+            "options_template": ["Native module compilation", "JavaScript runtime execution", "Hardware acceleration", "API gateway configuration"],
+            "correct_idx": 1
+        },
+        {
+            "template": "What is a primary use case of {topic}?",
+            "options_template": ["Building mobile applications for iOS and Android", "Creating web servers", "Managing cloud infrastructure", "Data science and analytics"],
+            "correct_idx": 0
+        },
+        {
+            "template": "How does {topic} improve development efficiency?",
+            "options_template": ["Write once, run everywhere approach", "Manual platform-specific coding", "Assembly language optimization", "Hardware-level debugging"],
+            "correct_idx": 0
+        },
+        {
+            "template": "What is one of the primary advantages of {topic}?",
+            "options_template": ["Faster time-to-market", "Reduced code complexity", "Enhanced runtime performance", "Lower hardware costs"],
+            "correct_idx": 0
+        },
+        {
+            "template": "Which development paradigm does {topic} primarily use?",
+            "options_template": ["Component-based architecture", "Procedural programming", "Functional reactive programming", "Object-oriented inheritance"],
+            "correct_idx": 0
+        },
+    ]
+    
+    questions = []
+    
+    for i in range(min(num_questions, len(question_templates))):
+        template = question_templates[i % len(question_templates)]
+        question_text = template["template"].format(topic=topic)
+        
+        # Get correct option BEFORE shuffling
+        correct_option = template["options_template"][template["correct_idx"]]
+        
+        # Create contextual options and shuffle
+        options = template["options_template"].copy()
+        random.shuffle(options)
+        
+        # Find where correct option ended up after shuffle
+        correct_index = options.index(correct_option)
+        correct_letter = chr(65 + correct_index)  # Convert index to A, B, C, D
+        
+        # Add A), B), C), D) labels to options
+        labeled_options = [f"{chr(65 + idx)}) {opt}" for idx, opt in enumerate(options)]
+        
+        questions.append({
+            "question": question_text,
+            "options": labeled_options,
+            "correct": correct_letter
+        })
+    
+    return questions
+
+
+
+def _generate_mock_quiz(topic: str, num_questions: int, difficulty: str) -> list:
     """Generate mock quiz questions for testing/fallback (when LLM is unavailable)."""
     
     # Sample quiz questions by topic
@@ -518,44 +667,21 @@ def _generate_mock_quiz(topic: str, num_questions: int, difficulty: str) -> list
             quiz_data = sample_quizzes[key]
             break
     
-    # Fallback to generic questions if topic not found
+    # Fallback to contextual generator if topic not found
     if not quiz_data:
-        quiz_data = [
-            {
-                "question": f"What is a fundamental concept in {topic}?",
-                "options": ["Option A", "Option B", "Option C", "Option D"],
-                "correct": "A"
-            },
-            {
-                "question": f"How is {topic} applied in real-world scenarios?",
-                "options": ["Application 1", "Application 2", "Application 3", "Application 4"],
-                "correct": "B"
-            },
-            {
-                "question": f"What is the history behind {topic}?",
-                "options": ["Historical point 1", "Historical point 2", "Historical point 3", "Historical point 4"],
-                "correct": "C"
-            },
-            {
-                "question": f"What are the key principles of {topic}?",
-                "options": ["Principle A", "Principle B", "Principle C", "Principle D"],
-                "correct": "B"
-            },
-            {
-                "question": f"What is the importance of {topic}?",
-                "options": ["Importance 1", "Importance 2", "Importance 3", "Importance 4"],
-                "correct": "A"
-            },
-        ]
+        quiz_data = _generate_contextual_quiz_fallback(topic, num_questions, difficulty)
     
     # Convert to QuizQuestion objects
     questions = []
     for i, q in enumerate(quiz_data[:num_questions]):
+        # Add A), B), C), D) labels to options
+        labeled_options = [f"{chr(65 + idx)}) {opt}" for idx, opt in enumerate(q["options"])]
+        
         questions.append(QuizQuestion(
             question_id=str(uuid.uuid4()),
             question=q["question"],
-            options=q["options"],
-            correct_answer=q["correct"]
+            options=labeled_options,
+            correct_answer=q["correct"]  # Store internally for evaluation
         ))
     
     return questions

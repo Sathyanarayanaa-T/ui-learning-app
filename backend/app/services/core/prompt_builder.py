@@ -275,18 +275,37 @@ Summary:"""
     
     def build_quiz_generation_prompt(self, topic: str, num_questions: int = 5, difficulty: str = "medium") -> str:
         """Build prompt for generating quiz questions."""
+        difficulty_guidance = {
+            "easy": "Focus on basic definitions, fundamental concepts, and straightforward applications.",
+            "medium": "Include conceptual understanding, comparisons, and practical applications.",
+            "hard": "Test deep understanding, complex scenarios, edge cases, and synthesis of multiple concepts."
+        }
+        
         return f"""Generate exactly {num_questions} multiple-choice quiz questions about "{topic}" at {difficulty} difficulty level.
+
+REQUIREMENTS:
+- All questions must be CONTEXTUAL and SPECIFIC to "{topic}"
+- Options must be plausible but clearly distinct (avoid similar options)
+- One option must be definitively correct
+- Include {difficulty_guidance.get(difficulty, 'medium')}
+- Questions should test different aspects: definitions, applications, analysis, and reasoning
 
 STRICT FORMAT (mandatory):
 Each question MUST follow this exact format:
 
 Q1: [Question text here?]
-A) [Option A]
-B) [Option B]
-C) [Option C]
-D) [Option D]
+A) [Detailed Option A - must be relevant to topic]
+B) [Detailed Option B - must be relevant to topic]
+C) [Detailed Option C - must be relevant to topic]
+D) [Detailed Option D - must be relevant to topic]
 CORRECT: [A/B/C/D]
-EXPLANATION: [2-3 sentence explanation of why this is correct]
+EXPLANATION: [2-3 sentence explanation of why this is correct and what concepts it tests]
+
+IMPORTANT: 
+- Do NOT use generic placeholders like "Option A", "Option B", etc.
+- Each option must be a real, contextual answer relevant to "{topic}"
+- Create distractors that are plausible but incorrect
+- Vary question types: definitions, applications, comparisons, analysis
 
 ---
 
