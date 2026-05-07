@@ -272,6 +272,58 @@ Content:
 {content}
 
 Summary:"""
+    
+    def build_quiz_generation_prompt(self, topic: str, num_questions: int = 5, difficulty: str = "medium") -> str:
+        """Build prompt for generating quiz questions."""
+        return f"""Generate exactly {num_questions} multiple-choice quiz questions about "{topic}" at {difficulty} difficulty level.
+
+STRICT FORMAT (mandatory):
+Each question MUST follow this exact format:
+
+Q1: [Question text here?]
+A) [Option A]
+B) [Option B]
+C) [Option C]
+D) [Option D]
+CORRECT: [A/B/C/D]
+EXPLANATION: [2-3 sentence explanation of why this is correct]
+
+---
+
+Generate {num_questions} questions now:"""
+    
+    def build_conversation_summary_prompt(self, conversation: str) -> str:
+        """Build prompt for summarizing entire conversation."""
+        return f"""Analyze the following learning conversation and provide:
+
+1. SUMMARY: 2-3 sentences summarizing the main learning points
+2. KEY_POINTS: 4-5 bullet points of important concepts covered
+3. TOPICS: List of topics discussed
+4. PROGRESS: Assessment of learning progress and understanding
+5. RECOMMENDATIONS: 2-3 suggestions for next learning steps
+
+Conversation:
+{conversation}
+
+Provide the response in this exact format:
+
+SUMMARY: [your summary]
+
+KEY_POINTS:
+- [point 1]
+- [point 2]
+- [point 3]
+- [point 4]
+- [point 5]
+
+TOPICS: [topic1, topic2, topic3...]
+
+PROGRESS: [assessment]
+
+RECOMMENDATIONS:
+- [recommendation 1]
+- [recommendation 2]
+- [recommendation 3]"""
 
 
 # Global prompt builder instance

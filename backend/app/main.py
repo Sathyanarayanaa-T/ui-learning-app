@@ -9,7 +9,7 @@ import logging
 from .core.config import settings
 from .core.database import create_all_tables
 from .routes import (
-    chat, session, analytics, voice, documents, progress, proactive, learning_path
+    chat, session, analytics, voice, documents, progress, proactive, learning_path, tutor
 )
 from .services.core import ai_service
 
@@ -42,6 +42,7 @@ app.include_router(documents.router)
 app.include_router(progress.router)
 app.include_router(proactive.router)
 app.include_router(learning_path.router)
+app.include_router(tutor.router)
 
 
 # Health check endpoint

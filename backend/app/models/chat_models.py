@@ -79,3 +79,82 @@ class RegeneratedChatResponse(BaseModel):
     tokens_used: Optional[int]
     cost: Optional[float]
     timestamp: datetime
+
+
+class QuizMeRequest(BaseModel):
+    """Request model for generating quiz questions."""
+    session_id: str
+    topic: str
+    num_questions: int = 5  # 5-10 questions
+    difficulty: Literal["easy", "medium", "hard"] = "medium"
+
+
+class QuizQuestion(BaseModel):
+    """Individual quiz question."""
+    question_id: str
+    question: str
+    options: list[str]  # A, B, C, D options
+    correct_answer: Optional[str] = None  # Hidden from user initially
+
+
+class QuizMeResponse(BaseModel):
+    """Response model for quiz generation."""
+    quiz_id: str
+    session_id: str
+    topic: str
+    questions: list[QuizQuestion]
+    total_questions: int
+    difficulty: str
+    timestamp: datetime
+
+
+class QuizAnswerRequest(BaseModel):
+    """Request model for submitting quiz answer."""
+    session_id: str
+    quiz_id: str
+    question_id: str
+    selected_answer: str  # User's answer (A, B, C, D)
+
+
+class QuizAnswerResponse(BaseModel):
+    """Response model for quiz answer evaluation."""
+    question_id: str
+    is_correct: bool
+    correct_answer: str
+    explanation: str
+    points_earned: int
+
+
+class QuizScoreRequest(BaseModel):
+    """Request model for getting quiz score."""
+    session_id: str
+    quiz_id: str
+
+
+class QuizScoreResponse(BaseModel):
+    """Response model for quiz score."""
+    quiz_id: str
+    topic: str
+    total_questions: int
+    correct_answers: int
+    score_percentage: float
+    feedback: str
+    timestamp: datetime
+
+
+class SummarizeRequest(BaseModel):
+    """Request model for summarizing conversation."""
+    session_id: str
+    include_quiz: bool = False  # Include quiz results in summary
+
+
+class SummarizeResponse(BaseModel):
+    """Response model for conversation summary."""
+    session_id: str
+    summary: str
+    key_points: list[str]
+    topics_covered: list[str]
+    learning_progress: str
+    recommendations: list[str]
+    timestamp: datetime
+
