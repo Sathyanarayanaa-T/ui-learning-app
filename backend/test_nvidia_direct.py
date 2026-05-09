@@ -11,7 +11,7 @@ load_dotenv()
 
 api_key = os.getenv("NVIDIA_NIM_API_KEY")
 base_url = os.getenv("NVIDIA_NIM_BASE_URL", "https://integrate.api.nvidia.com/v1")
-model = os.getenv("NVIDIA_NIM_MODEL", "moonshotai/kimi-k2.6")
+model = os.getenv("NVIDIA_NIM_MODEL", "openai/gpt-oss-20b")
 
 print("=" * 60)
 print("DIRECT NVIDIA NIM API TEST")

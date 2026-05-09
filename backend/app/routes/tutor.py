@@ -68,21 +68,26 @@ async def generate_quiz(request: QuizMeRequest, db: Session = Depends(get_db)) -
             print(f"Using fallback quiz generator (faster)...")
             questions = _generate_mock_quiz(request.topic, num_questions, request.difficulty)
         
-        # Hide correct answers from user (only sent for storage, not to frontend)
+        # Hide correct answers from user response (only sent for storage, not to frontend)
+        response_questions = []
         for question in questions:
-            question.correct_answer = None
+            response_questions.append(QuizQuestion(
+                question_id=question.question_id,
+                question=question.question,
+                options=question.options,
+                correct_answer=None  # Hidden from user
+            ))
         
-        if not questions:
-            raise ValueError("Failed to generate quiz questions")
-        
+        # Store the quiz with answers in session for evaluation later
         quiz_id = str(uuid.uuid4())
+        _store_quiz_in_session(request.session_id, quiz_id, questions, topic=request.topic, difficulty=request.difficulty)
         
         return QuizMeResponse(
             quiz_id=quiz_id,
             session_id=request.session_id,
             topic=request.topic,
-            questions=questions,
-            total_questions=len(questions),
+            questions=response_questions,
+            total_questions=len(response_questions),
             difficulty=request.difficulty,
             timestamp=datetime.utcnow()
         )
@@ -100,7 +105,7 @@ async def submit_quiz_answer(request: QuizAnswerRequest, db: Session = Depends(g
         session_id: User session ID
         quiz_id: Quiz ID
         question_id: Question ID
-        selected_answer: User's selected answer (A, B, C, D)
+        selected_answer: User's selected answer (a, b, c, d)
     """
     try:
         # Validate session
@@ -108,38 +113,68 @@ async def submit_quiz_answer(request: QuizAnswerRequest, db: Session = Depends(g
         if not session_obj:
             raise HTTPException(status_code=404, detail="Session not found")
         
-        # In production, you'd fetch the actual question from the quiz storage
-        # For now, we'll use the LLM to evaluate
+        # Normalize the selected answer - handle both full text and just letter
+        user_answer = request.selected_answer.strip().lower()
         
-        evaluation_prompt = f"""Evaluate this quiz answer:
-Question: [Provided by client]
-User's Answer: {request.selected_answer}
-
-Provide:
-1. Is the answer correct? (yes/no)
-2. The correct answer
-3. Brief explanation (2-3 sentences) explaining why this is correct
-4. Points earned (10 if correct, 0 if incorrect)
-
-Format your response as JSON."""
+        # If it contains ")", it's like "a) Option text" - extract just the letter
+        if ")" in user_answer:
+            user_answer = user_answer.split(")")[0].strip()
         
-        evaluation = ai_service.chat(
-            system_prompt="You are a quiz evaluator. Evaluate student answers fairly and provide constructive feedback.",
+        # Remove trailing ")" if present
+        user_answer = user_answer.rstrip(')')
+        
+        # Retrieve stored quiz data with correct answers
+        stored_quiz = _get_quiz_from_session(request.session_id, request.quiz_id)
+        
+        if not stored_quiz:
+            raise HTTPException(status_code=404, detail="Quiz not found in session. Please regenerate quiz.")
+        
+        # Find the question in the stored quiz
+        correct_answer = None
+        for q in stored_quiz.get("questions", []):
+            if q["question_id"] == request.question_id:
+                correct_answer = q["correct_answer"]
+                break
+        
+        if correct_answer is None:
+            raise HTTPException(status_code=404, detail="Question not found in quiz")
+        
+        # Normalize correct answer for comparison
+        correct_answer_normalized = correct_answer.strip().lower().rstrip(')')
+        
+        # Direct comparison
+        is_correct = user_answer == correct_answer_normalized
+        
+        # Generate explanation
+        explanation_prompt = f"""Quiz question: [The question text would go here]
+Selected answer: {user_answer.upper()}
+Correct answer: {correct_answer_normalized.upper()}
+Is correct: {is_correct}
+
+Provide a brief 1-2 sentence explanation of why this answer is {('correct' if is_correct else 'incorrect')}.
+Be educational and constructive."""
+        
+        explanation = ai_service.chat(
+            system_prompt="You are a quiz educator. Provide brief, clear explanations for quiz answers.",
             messages=[],
-            user_message=evaluation_prompt
+            user_message=explanation_prompt
         )
         
-        # Parse evaluation response
-        is_correct, correct_answer, explanation, points = _parse_evaluation(evaluation)
+        points = 10 if is_correct else 0
+        
+        # Store the answer for score calculation
+        _store_quiz_answer(request.session_id, request.quiz_id, request.question_id, is_correct)
         
         return QuizAnswerResponse(
             question_id=request.question_id,
             is_correct=is_correct,
-            correct_answer=correct_answer,
-            explanation=explanation,
+            correct_answer=correct_answer_normalized,
+            explanation=explanation.strip()[:300],
             points_earned=points
         )
     
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Answer evaluation failed: {str(e)}")
 
@@ -159,12 +194,28 @@ async def get_quiz_score(request: QuizScoreRequest, db: Session = Depends(get_db
         if not session_obj:
             raise HTTPException(status_code=404, detail="Session not found")
         
-        # In production, retrieve actual quiz results from database
-        # For now, return a sample response structure
+        # Retrieve stored quiz and answer data
+        quiz_data = _get_quiz_from_session(request.session_id, request.quiz_id)
+        if not quiz_data:
+            raise HTTPException(status_code=404, detail="Quiz not found in session")
         
-        total_questions = 10
-        correct_answers = 8
-        score_percentage = (correct_answers / total_questions) * 100
+        # Get stored answers for this quiz
+        answers_data = _get_quiz_answers(request.session_id, request.quiz_id)
+        
+        # Calculate score
+        total_questions = len(quiz_data.get("questions", []))
+        correct_answers = 0
+        
+        if answers_data:
+            for answer in answers_data.get("answers", []):
+                if answer.get("is_correct"):
+                    correct_answers += 1
+        
+        # Calculate percentage
+        score_percentage = (correct_answers / total_questions * 100) if total_questions > 0 else 0
+        
+        # Get topic from stored quiz
+        topic = quiz_data.get("topic", "Quiz")
         
         # Generate feedback based on score
         if score_percentage >= 90:
@@ -178,7 +229,7 @@ async def get_quiz_score(request: QuizScoreRequest, db: Session = Depends(get_db
         
         return QuizScoreResponse(
             quiz_id=request.quiz_id,
-            topic="[Topic]",
+            topic=topic,
             total_questions=total_questions,
             correct_answers=correct_answers,
             score_percentage=score_percentage,
@@ -186,6 +237,8 @@ async def get_quiz_score(request: QuizScoreRequest, db: Session = Depends(get_db
             timestamp=datetime.utcnow()
         )
     
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Score retrieval failed: {str(e)}")
 
@@ -278,8 +331,8 @@ def _parse_quiz_content(content: str, expected_count: int) -> list[QuizQuestion]
             
             for i, line in enumerate(lines[1:]):
                 # Extract options
-                if re.match(r'^[A-D]\)', line):
-                    option_text = re.sub(r'^[A-D]\)\s*', '', line).strip()
+                if re.match(r'^[A-Da-d]\)', line):
+                    option_text = re.sub(r'^[A-Da-d]\)\s*', '', line).strip()
                     # Reject placeholder options
                     if option_text and not re.match(r'^(Option|Application|Principle|Importance|Historical point|Point)\s+[A-D]$', option_text, re.IGNORECASE):
                         options.append(option_text)
@@ -301,14 +354,17 @@ def _parse_quiz_content(content: str, expected_count: int) -> list[QuizQuestion]
                 )
                 
                 if has_real_content or all(len(opt) > 2 for opt in options):
-                    # Add A), B), C), D) labels to options
-                    labeled_options = [f"{chr(65 + idx)}) {opt}" for idx, opt in enumerate(options)]
+                    # Add a), b), c), d) labels to options (lowercase)
+                    labeled_options = [f"{chr(97 + idx)}) {opt}" for idx, opt in enumerate(options)]
+                    
+                    # Convert correct answer to lowercase
+                    correct_answer_lower = correct_answer.lower()
                     
                     questions.append(QuizQuestion(
                         question_id=str(uuid.uuid4()),
                         question=question_text,
                         options=labeled_options,
-                        correct_answer=correct_answer  # Store internally, will be hidden in response
+                        correct_answer=correct_answer_lower  # Store internally, will be hidden in response
                     ))
         
         return questions[:expected_count]
@@ -528,10 +584,10 @@ def _generate_generic_quiz_questions(topic: str, num_questions: int, difficulty:
         
         # Find where correct option ended up after shuffle
         correct_index = options.index(correct_option)
-        correct_letter = chr(65 + correct_index)  # Convert index to A, B, C, D
+        correct_letter = chr(97 + correct_index)  # Convert index to a, b, c, d (lowercase)
         
-        # Add A), B), C), D) labels to options
-        labeled_options = [f"{chr(65 + idx)}) {opt}" for idx, opt in enumerate(options)]
+        # Add a), b), c), d) labels to options (lowercase)
+        labeled_options = [f"{chr(97 + idx)}) {opt}" for idx, opt in enumerate(options)]
         
         questions.append({
             "question": question_text,
@@ -552,108 +608,108 @@ def _generate_mock_quiz(topic: str, num_questions: int, difficulty: str) -> list
             {
                 "question": "What is the primary pigment in plants responsible for photosynthesis?",
                 "options": ["Chlorophyll", "Carotenoid", "Xanthophyll", "Hemoglobin"],
-                "correct": "A"
+                "correct": "a"
             },
             {
                 "question": "In which part of the chloroplast does the light-dependent reaction occur?",
                 "options": ["Stroma", "Thylakoid membrane", "Matrix", "Inner envelope"],
-                "correct": "B"
+                "correct": "b"
             },
             {
                 "question": "What is the main product of the light-dependent reactions?",
                 "options": ["Glucose", "ATP and NADPH", "Water", "Carbon dioxide"],
-                "correct": "B"
+                "correct": "b"
             },
             {
                 "question": "The Calvin cycle is also known as:",
                 "options": ["Dark reactions", "Light reactions", "Electron transport", "Photolysis"],
-                "correct": "A"
+                "correct": "a"
             },
             {
                 "question": "What molecule is the main source of oxygen released during photosynthesis?",
                 "options": ["Carbon dioxide", "Water", "Glucose", "Chlorophyll"],
-                "correct": "B"
+                "correct": "b"
             },
         ],
         "biology": [
             {
                 "question": "What is the powerhouse of the cell?",
                 "options": ["Nucleus", "Mitochondria", "Ribosome", "Lysosome"],
-                "correct": "B"
+                "correct": "b"
             },
             {
                 "question": "Which of the following is NOT part of the central dogma of molecular biology?",
                 "options": ["DNA", "RNA", "Protein", "Lipid"],
-                "correct": "D"
+                "correct": "d"
             },
             {
                 "question": "What is the process by which cells divide to form two identical daughter cells?",
                 "options": ["Meiosis", "Mitosis", "Cytokinesis", "Apoptosis"],
-                "correct": "B"
+                "correct": "b"
             },
             {
                 "question": "How many pairs of chromosomes do humans have?",
                 "options": ["23", "46", "92", "12"],
-                "correct": "A"
+                "correct": "a"
             },
             {
                 "question": "What is the basic unit of heredity?",
                 "options": ["Chromosome", "Gene", "Allele", "Codon"],
-                "correct": "B"
+                "correct": "b"
             },
         ],
         "mathematics": [
             {
                 "question": "What is the derivative of x^3?",
                 "options": ["3x", "3x^2", "x^2", "3"],
-                "correct": "B"
+                "correct": "b"
             },
             {
                 "question": "Solve: 2x + 5 = 13",
                 "options": ["x = 2", "x = 4", "x = 6", "x = 8"],
-                "correct": "B"
+                "correct": "b"
             },
             {
                 "question": "What is the area of a circle with radius 5?",
                 "options": ["25π", "10π", "100π", "50π"],
-                "correct": "A"
+                "correct": "a"
             },
             {
                 "question": "What is the sum of angles in a triangle?",
                 "options": ["90°", "180°", "270°", "360°"],
-                "correct": "B"
+                "correct": "b"
             },
             {
                 "question": "What is log₁₀(100)?",
                 "options": ["1", "2", "10", "100"],
-                "correct": "B"
+                "correct": "b"
             },
         ],
         "chemistry": [
             {
                 "question": "What is the atomic number of Carbon?",
                 "options": ["4", "6", "8", "12"],
-                "correct": "B"
+                "correct": "b"
             },
             {
                 "question": "What type of bond is formed between two carbon atoms?",
                 "options": ["Ionic", "Hydrogen", "Covalent", "Metallic"],
-                "correct": "C"
+                "correct": "c"
             },
             {
                 "question": "What is the pH of a neutral solution?",
                 "options": ["0", "7", "14", "10"],
-                "correct": "B"
+                "correct": "b"
             },
             {
                 "question": "Which state of matter has a definite shape and volume?",
                 "options": ["Gas", "Liquid", "Plasma", "Solid"],
-                "correct": "D"
+                "correct": "d"
             },
             {
                 "question": "What is Avogadro's number?",
                 "options": ["6.02 × 10^23", "3.14 × 10^20", "9.81 × 10^15", "1.66 × 10^-27"],
-                "correct": "A"
+                "correct": "a"
             },
         ],
     }
@@ -674,8 +730,8 @@ def _generate_mock_quiz(topic: str, num_questions: int, difficulty: str) -> list
     # Convert to QuizQuestion objects
     questions = []
     for i, q in enumerate(quiz_data[:num_questions]):
-        # Add A), B), C), D) labels to options
-        labeled_options = [f"{chr(65 + idx)}) {opt}" for idx, opt in enumerate(q["options"])]
+        # Add a), b), c), d) labels to options (lowercase)
+        labeled_options = [f"{chr(97 + idx)}) {opt}" for idx, opt in enumerate(q["options"])]
         
         questions.append(QuizQuestion(
             question_id=str(uuid.uuid4()),
@@ -685,4 +741,52 @@ def _generate_mock_quiz(topic: str, num_questions: int, difficulty: str) -> list
         ))
     
     return questions
+
+
+# Simple in-memory quiz storage (in production, use database)
+_quiz_storage = {}
+
+
+def _store_quiz_in_session(session_id: str, quiz_id: str, questions: list[QuizQuestion], topic: str = "", difficulty: str = "") -> None:
+    """Store quiz questions with answers for evaluation."""
+    key = f"{session_id}:{quiz_id}"
+    _quiz_storage[key] = {
+        "topic": topic,
+        "difficulty": difficulty,
+        "questions": [
+            {
+                "question_id": q.question_id,
+                "question": q.question,
+                "options": q.options,
+                "correct_answer": q.correct_answer
+            }
+            for q in questions
+        ],
+        "answers": []  # Track submitted answers
+    }
+
+
+def _get_quiz_from_session(session_id: str, quiz_id: str) -> dict:
+    """Retrieve stored quiz questions with answers."""
+    key = f"{session_id}:{quiz_id}"
+    return _quiz_storage.get(key)
+
+
+def _store_quiz_answer(session_id: str, quiz_id: str, question_id: str, is_correct: bool) -> None:
+    """Store the answer for a question to track score."""
+    key = f"{session_id}:{quiz_id}"
+    if key in _quiz_storage:
+        _quiz_storage[key]["answers"].append({
+            "question_id": question_id,
+            "is_correct": is_correct
+        })
+
+
+def _get_quiz_answers(session_id: str, quiz_id: str) -> dict:
+    """Retrieve all answers submitted for a quiz."""
+    key = f"{session_id}:{quiz_id}"
+    if key in _quiz_storage:
+        return {"answers": _quiz_storage[key].get("answers", [])}
+    return {"answers": []}
+
 

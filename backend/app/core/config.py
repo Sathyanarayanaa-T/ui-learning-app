@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # NVIDIA NIM Cloud (Primary)
     NVIDIA_NIM_API_KEY: str = ""
     NVIDIA_NIM_BASE_URL: str = "https://integrate.api.nvidia.com/v1"
-    NVIDIA_NIM_MODEL: str = "moonshotai/kimi-k2.6"
+    NVIDIA_NIM_MODEL: str = "openai/gpt-oss-20b"
     NVIDIA_NIM_ENABLE_THINKING: bool = True
     
     # Ollama (Local - Fallback)
