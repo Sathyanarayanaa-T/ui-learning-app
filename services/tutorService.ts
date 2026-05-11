@@ -120,3 +120,47 @@ export async function regenerateChatResponse(
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
     return res.json();
 }
+
+// ─── POST /tutor/quiz-me ─────────────────────────────────────
+export async function generateQuiz(req: import('../types/tutor').QuizMeRequest): Promise<import('../types/tutor').QuizMeResponse> {
+    const res = await fetch(`${API_BASE_URL}/tutor/quiz-me`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req),
+    });
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    return res.json();
+}
+
+// ─── POST /tutor/summarize ───────────────────────────────────
+export async function summarizeChat(req: import('../types/tutor').SummarizeRequest): Promise<import('../types/tutor').SummarizeResponse> {
+    const res = await fetch(`${API_BASE_URL}/tutor/summarize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req),
+    });
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    return res.json();
+}
+
+// ─── POST /tutor/quiz-answer ─────────────────────────────────
+export async function submitQuizAnswer(req: import('../types/tutor').QuizAnswerRequest): Promise<import('../types/tutor').QuizAnswerResponse> {
+    const res = await fetch(`${API_BASE_URL}/tutor/quiz-answer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req),
+    });
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    return res.json();
+}
+
+// ─── POST /tutor/quiz-score ──────────────────────────────────
+export async function getQuizScore(req: import('../types/tutor').QuizScoreRequest): Promise<import('../types/tutor').QuizScoreResponse> {
+    const res = await fetch(`${API_BASE_URL}/tutor/quiz-score`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req),
+    });
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    return res.json();
+}

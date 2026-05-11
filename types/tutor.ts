@@ -91,6 +91,75 @@ export interface RegeneratedChatResponse {
     timestamp: string;
 }
 
+export interface QuizQuestion {
+    question_id: string;
+    question: string;
+    options: string[];
+    correct_answer?: string;
+}
+
+export interface QuizMeRequest {
+    session_id: string;
+    topic: string;
+    num_questions?: number;
+    difficulty?: 'easy' | 'medium' | 'hard';
+}
+
+export interface QuizMeResponse {
+    quiz_id: string;
+    session_id: string;
+    topic: string;
+    questions: QuizQuestion[];
+    total_questions: number;
+    difficulty: string;
+    timestamp: string;
+}
+
+export interface QuizAnswerRequest {
+    session_id: string;
+    quiz_id: string;
+    question_id: string;
+    selected_answer: string;
+}
+
+export interface QuizAnswerResponse {
+    question_id: string;
+    is_correct: boolean;
+    correct_answer: string;
+    explanation: string;
+    points_earned: number;
+}
+
+export interface QuizScoreRequest {
+    session_id: string;
+    quiz_id: string;
+}
+
+export interface QuizScoreResponse {
+    quiz_id: string;
+    topic: string;
+    total_questions: number;
+    correct_answers: number;
+    score_percentage: number;
+    feedback: string;
+    timestamp: string;
+}
+
+export interface SummarizeRequest {
+    session_id: string;
+    include_quiz?: boolean;
+}
+
+export interface SummarizeResponse {
+    session_id: string;
+    summary: string;
+    key_points: string[];
+    topics_covered: string[];
+    learning_progress: string;
+    recommendations: string[];
+    timestamp: string;
+}
+
 // ─── Local (UI) Models ────────────────────────────────────────
 // These exist only in the frontend; they are not API shapes.
 
@@ -108,6 +177,12 @@ export interface ChatMessage {
     isError?: boolean;
     lastUserMessage?: string;
     chatId?: string;  // Backend chat ID for feedback/regenerate
+    quizData?: QuizMeResponse;
+    quizState?: {
+        answers: Record<string, string>;
+        isCompleted: boolean;
+        evaluations?: Record<string, QuizAnswerResponse>;
+    };
 }
 
 export interface LocalSession {

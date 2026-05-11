@@ -1,36 +1,49 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Animated, StyleSheet } from 'react-native';
+import { View, Animated, StyleSheet, Image } from 'react-native';
 import { useColors } from '../../hooks/useColors';
 import { Spacing } from '../../constants/theme';
 
 export const TypingIndicator: React.FC = () => {
     const colors = useColors();
-    const dots = [useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current];
+    const animValue = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
-        const anims = dots.map((anim, i) =>
-            Animated.loop(
-                Animated.sequence([
-                    Animated.delay(i * 180),
-                    Animated.timing(anim, { toValue: -6, duration: 300, useNativeDriver: true }),
-                    Animated.timing(anim, { toValue: 0, duration: 300, useNativeDriver: true }),
-                    Animated.delay(600 - i * 180),
-                ])
-            )
-        );
-        anims.forEach((a) => a.start());
-        return () => anims.forEach((a) => a.stop());
-    }, []);
+        let isMounted = true;
+        const startAnim = () => {
+            if (!isMounted) return;
+            animValue.setValue(0);
+            Animated.timing(animValue, {
+                toValue: 1,
+                duration: 1000,
+                useNativeDriver: true,
+            }).start(({ finished }) => {
+                if (finished && isMounted) {
+                    startAnim();
+                }
+            });
+        };
+        startAnim();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [animValue]);
+
+    const dot1Y = animValue.interpolate({ inputRange: [0, 0.2, 0.4, 1], outputRange: [0, -6, 0, 0] });
+    const dot2Y = animValue.interpolate({ inputRange: [0, 0.2, 0.4, 0.6, 1], outputRange: [0, 0, -6, 0, 0] });
+    const dot3Y = animValue.interpolate({ inputRange: [0, 0.4, 0.6, 0.8, 1], outputRange: [0, 0, -6, 0, 0] });
+    
+    const transforms = [dot1Y, dot2Y, dot3Y];
 
     return (
         <View style={[styles.row]}>
             {/* AI avatar */}
-            <View style={[styles.avatar, { backgroundColor: colors.hexawareBlue }]}>
-                <Animated.Text style={styles.avatarText}>AI</Animated.Text>
+            <View style={styles.avatar}>
+                <Image source={require('../../assets/botchat.png')} style={{ width: 32, height: 32, borderRadius: 16 }} resizeMode="cover" />
             </View>
             <View style={[styles.bubble, { backgroundColor: colors.snow, borderColor: colors.borderLight }]}>
                 <View style={styles.dots}>
-                    {dots.map((anim, i) => (
+                    {transforms.map((anim, i) => (
                         <Animated.View
                             key={i}
                             style={[styles.dot, { backgroundColor: colors.silver, transform: [{ translateY: anim }] }]}

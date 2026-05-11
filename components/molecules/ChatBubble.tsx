@@ -7,16 +7,56 @@ import { useColors } from '../../hooks/useColors';
 import { FontSize, FontWeight, Radius, Spacing } from '../../constants/theme';
 import type { ChatMessage } from '../../types/tutor';
 import Markdown from 'react-native-markdown-display';
+import { InteractiveQuiz } from '../organisms/InteractiveQuiz';
 
 interface ChatBubbleProps {
     message: ChatMessage;
+    isLatest?: boolean;
 }
 
+const animatedMessageIds = new Set<string>();
+
 // ── Chat Bubble ──────────────────────────────────────────────
-export const ChatBubble: React.FC<ChatBubbleProps> = ({ message }) => {
+export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isLatest }) => {
     const colors = useColors();
     const { setFeedback, regenerateMessage, setEditingMessageId } = useTutorStore();
     const isUser = message.role === 'user';
+
+    const [displayedText, setDisplayedText] = React.useState(() => {
+        if (isUser || !message.text || !isLatest || animatedMessageIds.has(message.id)) {
+            return message.text || '';
+        }
+        return '';
+    });
+
+    React.useEffect(() => {
+        const fullText = message.text || '';
+        if (isUser || !isLatest || animatedMessageIds.has(message.id)) {
+            setDisplayedText(fullText);
+            return;
+        }
+
+        if (displayedText.length >= fullText.length) {
+            if (fullText.length > 0) animatedMessageIds.add(message.id);
+            return;
+        }
+
+        const words = fullText.split(' ');
+        let currentWordCount = displayedText ? displayedText.split(' ').length : 0;
+
+        const interval = setInterval(() => {
+            currentWordCount += 2; // Show 2 words at a time for snappiness
+            if (currentWordCount >= words.length) {
+                setDisplayedText(fullText);
+                animatedMessageIds.add(message.id);
+                clearInterval(interval);
+            } else {
+                setDisplayedText(words.slice(0, currentWordCount).join(' ') + (currentWordCount < words.length ? ' █' : ''));
+            }
+        }, 30);
+
+        return () => clearInterval(interval);
+    }, [message.text, isUser, message.id]);
 
     const handleCopy = async () => {
         await Clipboard.setStringAsync(message.text);
@@ -87,8 +127,16 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message }) => {
                         )
                     }}
                 >
-                    {message.text}
+                    {displayedText}
                 </Markdown>
+
+                {message.quizData && (
+                    <InteractiveQuiz 
+                        messageId={message.id} 
+                        quizData={message.quizData} 
+                        quizState={message.quizState} 
+                    />
+                )}
 
                 <View style={styles.timestampRow}>
                     {isUser && (
@@ -200,9 +248,9 @@ const styles = StyleSheet.create({
 });
 
 const markdownStyleUser = StyleSheet.create({
-    body: { color: '#FFFFFF', fontSize: FontSize.sm, lineHeight: 22 },
+    body: { color: '#FFFFFF', fontSize: FontSize.sm, lineHeight: 24 },
     code_block: { backgroundColor: '#0A0A1A', borderRadius: 8, padding: Spacing.md, marginTop: Spacing.xs, marginBottom: Spacing.xs },
-    code_inline: { backgroundColor: '#0A0A1A', color: '#14CBDE', paddingHorizontal: 4, borderRadius: 4, fontFamily: 'monospace' },
+    code_inline: { backgroundColor: 'rgba(10, 10, 26, 0.5)', color: '#14CBDE', fontFamily: 'monospace', fontSize: FontSize.xs, padding: 0, paddingHorizontal: 2, paddingVertical: 0, margin: 0, borderRadius: 2 },
     fence: { backgroundColor: '#0A0A1A', color: '#14CBDE', borderRadius: 8, padding: Spacing.md, fontFamily: 'monospace', fontSize: FontSize.xs },
     strong: { fontWeight: '700', color: '#FFFFFF' },
     link: { color: '#14CBDE', textDecorationLine: 'underline' },
@@ -210,9 +258,9 @@ const markdownStyleUser = StyleSheet.create({
 });
 
 const markdownStyleAI = (textColor: string) => StyleSheet.create({
-    body: { color: textColor, fontSize: FontSize.sm, lineHeight: 22 },
+    body: { color: textColor, fontSize: FontSize.sm, lineHeight: 24 },
     code_block: { backgroundColor: '#0A0A1A', borderRadius: 8, padding: Spacing.md, marginTop: Spacing.xs, marginBottom: Spacing.xs },
-    code_inline: { backgroundColor: '#0A0A1A', color: '#14CBDE', paddingHorizontal: 4, borderRadius: 4, fontFamily: 'monospace' },
+    code_inline: { backgroundColor: 'rgba(10, 10, 26, 0.05)', color: '#3C2CDA', fontFamily: 'monospace', fontSize: FontSize.xs, padding: 0, paddingHorizontal: 2, paddingVertical: 0, margin: 0, borderRadius: 2 },
     fence: { backgroundColor: '#0A0A1A', color: '#14CBDE', borderRadius: 8, padding: Spacing.md, fontFamily: 'monospace', fontSize: FontSize.xs },
     strong: { fontWeight: '700', color: textColor },
     link: { color: '#3C2CDA', textDecorationLine: 'underline' },

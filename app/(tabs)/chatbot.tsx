@@ -28,6 +28,7 @@ export default function ChatbotScreen() {
 
     const { width } = Dimensions.get('window');
     const slideAnim = useRef(new Animated.Value(width)).current;
+    const scrollViewRef = useRef<ScrollView>(null);
 
     useEffect(() => {
         loadSessions();
@@ -112,7 +113,7 @@ export default function ChatbotScreen() {
                     
                     <View style={styles.headerTitleContainer}>
                         <Text style={styles.headerTitle}>Ask Lumi</Text>
-                        <Text style={styles.headerModel}>AI Model ✨</Text>
+                        <Text style={styles.headerModel}>ask anything to me</Text>
                     </View>
 
                     <TouchableOpacity style={styles.newChatBtn} onPress={() => setIsHistoryOpen(true)}>
@@ -121,7 +122,12 @@ export default function ChatbotScreen() {
                 </View>
 
                 {/* SCROLLABLE CHAT AREA */}
-                <ScrollView contentContainerStyle={[styles.scrollContent, (!activeSessionId || messages.length === 0) && styles.scrollContentEmpty]} showsVerticalScrollIndicator={false}>
+                <ScrollView 
+                    ref={scrollViewRef}
+                    contentContainerStyle={[styles.scrollContent, (!activeSessionId || messages.length === 0) && styles.scrollContentEmpty]} 
+                    showsVerticalScrollIndicator={false}
+                    onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+                >
                     {/* WELCOME CARD */}
                     {(!activeSessionId || messages.length === 0) && (
                         <View style={styles.centeredWelcome}>
@@ -152,10 +158,11 @@ export default function ChatbotScreen() {
                         </View>
                     )}
 
-                    {activeSessionId && messages.map(m => (
+                    {activeSessionId && messages.map((m, index) => (
                         <MessageBubble 
                             key={m.id} 
                             message={m} 
+                            isLatest={index === messages.length - 1}
                             onLike={handleLike}
                             onDislike={handleDislike}
                             onRetry={handleRetry}

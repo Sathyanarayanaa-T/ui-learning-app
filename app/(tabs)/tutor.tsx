@@ -13,9 +13,10 @@ import { useAppStore } from '../../store/useAppStore';
 
 export default function TutorScreen({ isEmbedded, onClose }: any) {
     const { 
-        startNewSession, sendMessage, messages, sessions, loadSessions, restoreSession,
-        isTyping, editingMessageId, setEditingMessageId, editMessage,
-        activeDocumentId, activeDocumentName, isUploading, uploadFile, clearActiveDocument
+        startNewSession, sendMessage, messages, sessions, loadSessions, restoreSession, removeSession,
+        isTyping, editingMessageId, setEditingMessageId, editMessage, clearActiveChat,
+        activeDocumentId, activeDocumentName, isUploading, uploadFile, clearActiveDocument,
+        triggerQuiz, triggerSummarize
     } = useTutorStore();
     // Safely pull user from store if available
     const user = useAppStore(s => (s as any).user);
@@ -57,6 +58,7 @@ export default function TutorScreen({ isEmbedded, onClose }: any) {
 
     const { width } = Dimensions.get('window');
     const slideAnim = useRef(new Animated.Value(width)).current;
+    const scrollViewRef = useRef<ScrollView>(null);
 
     useEffect(() => {
         loadSessions();
@@ -94,12 +96,9 @@ export default function TutorScreen({ isEmbedded, onClose }: any) {
     };
 
     const modes = [
-        { label: "Explain concepts", value: "teaching" as const },
-        { label: "Solve concepts", value: "guiding" as const },
-        { label: "Quiz me", value: "normal" as const },
-        { label: "Career guidance", value: "normal" as const },
-        { label: "Recommend courses", value: "normal" as const },
-        { label: "Summarize", value: "normal" as const }
+        { label: "Navigate", value: "teaching" as const },
+        { label: "Mastery", value: "guiding" as const },
+        { label: "Resolve", value: "normal" as const }
     ];
 
     return (
@@ -119,20 +118,26 @@ export default function TutorScreen({ isEmbedded, onClose }: any) {
                             <Text style={styles.botSubtitle}>Your AI learning coach 🤖</Text>
                         </View>
                     </View>
-                    {isEmbedded ? (
-                        <TouchableOpacity style={{ padding: 8 }} onPress={onClose}>
-                            <Ionicons name="close" size={24} color="#1E1B4B" />
-                        </TouchableOpacity>
-                    ) : (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                         <TouchableOpacity style={styles.historyBtn} onPress={() => setIsHistoryOpen(true)}>
                             <Ionicons name="time-outline" size={14} color="#6B7280" />
                             <Text style={styles.historyBtnText}>History</Text>
                         </TouchableOpacity>
-                    )}
+                        {isEmbedded && (
+                            <TouchableOpacity style={{ padding: 8 }} onPress={onClose}>
+                                <Ionicons name="close" size={24} color="#1E1B4B" />
+                            </TouchableOpacity>
+                        )}
+                    </View>
                 </View>
 
                 {/* SCROLLABLE CHAT AREA */}
-                <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                <ScrollView 
+                    ref={scrollViewRef}
+                    contentContainerStyle={styles.scrollContent} 
+                    showsVerticalScrollIndicator={false}
+                    onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+                >
                     {/* WELCOME CARD */}
                     <LinearGradient colors={['#CBD0E5', '#E2E6F2']} style={[styles.welcomeCard, { borderColor: '#8088A7', borderWidth: 1 }]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
                         <View style={styles.welcomeContent}>
@@ -160,8 +165,8 @@ export default function TutorScreen({ isEmbedded, onClose }: any) {
                         </View>
                     )}
 
-                    {messages.map(m => (
-                        <ChatBubble key={m.id} message={m} />
+                    {messages.map((m, index) => (
+                        <ChatBubble key={m.id} message={m} isLatest={index === messages.length - 1} />
                     ))}
                     {isTyping && <TypingIndicator />}
 
@@ -193,6 +198,17 @@ export default function TutorScreen({ isEmbedded, onClose }: any) {
                                 <Ionicons name="close" size={20} color="#6B7280" />
                             </TouchableOpacity>
                         </View>
+                    )}
+                    {/* SUGGESTION CHIPS */}
+                    {messages.length > 0 && !isTyping && !editingMessageId && (
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.actionChipsScroll}>
+                            <TouchableOpacity style={styles.actionChip} onPress={triggerQuiz}>
+                                <Text style={styles.actionChipText}>Quiz me</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.actionChip} onPress={triggerSummarize}>
+                                <Text style={styles.actionChipText}>Summarize</Text>
+                            </TouchableOpacity>
+                        </ScrollView>
                     )}
                     <View style={styles.inputWrapper}>
                         <TouchableOpacity 
@@ -277,26 +293,43 @@ export default function TutorScreen({ isEmbedded, onClose }: any) {
                         <Text style={styles.emptyHistory}>No recent activity.</Text>
                     ) : (
                         filteredSessions.map(s => (
-                            <TouchableOpacity 
-                                key={s.session_id} 
-                                style={styles.historyItemCard} 
-                                onPress={() => { 
-                                    restoreSession(s); 
-                                    setIsHistoryOpen(false); 
-                                }}
-                            >
-                                <Text style={styles.historyCardTitle} numberOfLines={1}>{s.title || 'New Session'}</Text>
-                                <View style={styles.historyCardFooter}>
-                                    <Ionicons name="chatbubbles-outline" size={12} color="#6B7280" />
-                                    <Text style={styles.historyCardFooterText}>{s.messageCount || 0}</Text>
-                                    <Text style={styles.historyCardFooterText}> • </Text>
-                                    <Ionicons name="calendar-outline" size={12} color="#6B7280" />
-                                    <Text style={styles.historyCardFooterText}>{new Date(s.createdAt).toLocaleDateString()}</Text>
-                                </View>
-                            </TouchableOpacity>
+                            <View key={s.session_id} style={styles.historyItemCardWrapper}>
+                                <TouchableOpacity 
+                                    style={styles.historyItemCard} 
+                                    onPress={() => { 
+                                        restoreSession(s); 
+                                        setIsHistoryOpen(false); 
+                                    }}
+                                >
+                                    <Text style={styles.historyCardTitle} numberOfLines={1}>{s.title || 'New Session'}</Text>
+                                    <View style={styles.historyCardFooter}>
+                                        <Ionicons name="chatbubbles-outline" size={12} color="#6B7280" />
+                                        <Text style={styles.historyCardFooterText}>{s.messageCount || 0}</Text>
+                                        <Text style={styles.historyCardFooterText}> • </Text>
+                                        <Ionicons name="calendar-outline" size={12} color="#6B7280" />
+                                        <Text style={styles.historyCardFooterText}>{new Date(s.createdAt).toLocaleDateString()}</Text>
+                                    </View>
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.deleteBtn} onPress={() => removeSession(s.session_id)}>
+                                    <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                                </TouchableOpacity>
+                            </View>
                         ))
                     )}
                 </ScrollView>
+
+                <View style={styles.newChatContainer}>
+                    <TouchableOpacity 
+                        style={styles.newChatButton} 
+                        onPress={() => {
+                            clearActiveChat();
+                            setIsHistoryOpen(false);
+                        }}
+                    >
+                        <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
+                        <Text style={styles.newChatButtonText}>New Chat</Text>
+                    </TouchableOpacity>
+                </View>
             </Animated.View>
         </SafeAreaView>
     );
@@ -457,6 +490,24 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         flex: 1,
     },
+    actionChipsScroll: {
+        paddingBottom: 12,
+        flexDirection: 'row',
+    },
+    actionChip: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        backgroundColor: '#F8F8F9',
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        marginRight: 8,
+    },
+    actionChipText: {
+        fontSize: 12,
+        color: '#4B5563',
+        fontWeight: '500',
+    },
     inputWrapper: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -597,19 +648,49 @@ const styles = StyleSheet.create({
     },
     sideMenuContent: {
         padding: 16,
+        paddingBottom: 90,
+    },
+    newChatContainer: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        padding: 16,
+        backgroundColor: '#FFFFFF', // To match sidebar bg and block content scrolling behind
+        borderTopWidth: 1,
+        borderTopColor: '#E5E7EB',
+    },
+    newChatButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#3C2CDA',
+        paddingVertical: 14,
+        borderRadius: 12,
+        gap: 8,
+    },
+    newChatButtonText: {
+        color: '#FFFFFF',
+        fontWeight: 'bold',
+        fontSize: 15,
     },
     emptyHistory: {
         color: '#9CA3AF',
         textAlign: 'center',
         marginTop: 20,
     },
-    historyItemCard: {
+    historyItemCardWrapper: {
+        flexDirection: 'row',
+        alignItems: 'center',
         backgroundColor: '#FFFFFF',
         borderWidth: 1,
         borderColor: '#E5E7EB',
         borderRadius: 12,
-        padding: 14,
         marginBottom: 12,
+    },
+    historyItemCard: {
+        flex: 1,
+        padding: 14,
     },
     historyCardTitle: {
         fontSize: 14,
@@ -625,5 +706,10 @@ const styles = StyleSheet.create({
         fontSize: 11,
         color: '#6B7280',
         marginLeft: 4,
+    },
+    deleteBtn: {
+        padding: 14,
+        borderLeftWidth: 1,
+        borderLeftColor: '#F3F4F6',
     },
 });

@@ -4,7 +4,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ChatMessage, LocalSession, ChatMode } from '../types/tutor';
-import { createSession, sendChat, getHistory, uploadDocument, askDocumentQuestion, submitChatFeedback, regenerateChatResponse } from '../services/tutorService';
+import { createSession, sendChat, getHistory, uploadDocument, askDocumentQuestion, submitChatFeedback, regenerateChatResponse, generateQuiz, summarizeChat } from '../services/tutorService';
 
 const mkId = () => `${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
@@ -68,6 +68,11 @@ interface TutorState {
     editMessage: (messageId: string, newText: string) => Promise<void>;
     editingMessageId: string | null;
     setEditingMessageId: (id: string | null) => void;
+
+    // ── Quick Actions ────────────────────────────────────────
+    triggerQuiz: () => Promise<void>;
+    triggerSummarize: () => Promise<void>;
+    submitQuiz: (messageId: string, answers: Record<string, string>) => Promise<void>;
 }
 
 // ─── Store Implementation ──────────────────────────────────────
@@ -118,7 +123,7 @@ export const useTutorStore = create<TutorState>((set, get) => ({
                 ? "Welcome to **Teaching Mode**! I'll break down complex concepts step-by-step and help you build a deep understanding. What topic would you like to learn about?" 
                 : mode === 'guiding' 
                 ? "Hi! You are in **Guiding Mode**. I will use Socratic questioning to help you find the answers yourself. I'll provide hints and ask thought-provoking questions to guide your learning journey. What problem are you trying to solve?" 
-                : "Hello! I am TutorX in **Normal Q&A** mode. I'm here to provide direct, clear answers and explanations to your questions. How can I help you today?";
+                : "Hello! I am Lumi Coach in **Normal Q&A** mode. I'm here to provide direct, clear answers and explanations to your questions. How can I help you today?";
 
         const introMsg: ChatMessage = {
             id: mkId(),
@@ -517,6 +522,161 @@ export const useTutorStore = create<TutorState>((set, get) => ({
                 }
                 return { messages: msgs, isTyping: false };
             });
+        }
+    },
+
+    // ── Quick Actions ────────────────────────────────────────
+    triggerQuiz: async () => {
+        const { activeSessionId, activeSessionTitle } = get();
+        if (!activeSessionId) return;
+
+        set({ isTyping: true });
+        
+        const userMsg: ChatMessage = { id: mkId(), role: 'user', text: "Quiz me on this", timestamp: new Date().toISOString() };
+        set((s) => ({ messages: [...s.messages, userMsg] }));
+
+        try {
+            const res = await generateQuiz({ session_id: activeSessionId, topic: activeSessionTitle || "General", num_questions: 5 });
+            
+            const aiMsg: ChatMessage = {
+                id: mkId(),
+                role: 'assistant',
+                text: "Here is your quiz!",
+                timestamp: new Date().toISOString(),
+                quizData: res,
+                quizState: {
+                    answers: {},
+                    isCompleted: false,
+                }
+            };
+            
+            set((s) => ({ messages: [...s.messages, aiMsg], isTyping: false }));
+        } catch (error) {
+            console.error("Quiz error:", error);
+            const errorMsg: ChatMessage = {
+                id: mkId(),
+                role: 'assistant',
+                text: '⚠️ Failed to generate quiz. Please try again.',
+                timestamp: new Date().toISOString(),
+            };
+            set((s) => ({ messages: [...s.messages, errorMsg], isTyping: false }));
+        }
+    },
+
+    triggerSummarize: async () => {
+        const { activeSessionId } = get();
+        if (!activeSessionId) return;
+
+        set({ isTyping: true });
+        
+        const userMsg: ChatMessage = { id: mkId(), role: 'user', text: "Summarize this chat", timestamp: new Date().toISOString() };
+        set((s) => ({ messages: [...s.messages, userMsg] }));
+
+        try {
+            const res = await summarizeChat({ session_id: activeSessionId });
+            
+            let text = `📋 **Summary**\n\n${res.summary}\n\n`;
+            if (res.key_points && res.key_points.length > 0) {
+                text += `**Key Points:**\n`;
+                res.key_points.forEach(kp => {
+                    text += `- ${kp}\n`;
+                });
+            }
+            
+            const aiMsg: ChatMessage = {
+                id: mkId(),
+                role: 'assistant',
+                text,
+                timestamp: new Date().toISOString(),
+            };
+            
+            set((s) => ({ messages: [...s.messages, aiMsg], isTyping: false }));
+        } catch (error) {
+            console.error("Summarize error:", error);
+            const errorMsg: ChatMessage = {
+                id: mkId(),
+                role: 'assistant',
+                text: '⚠️ Failed to summarize chat. Please try again.',
+                timestamp: new Date().toISOString(),
+            };
+            set((s) => ({ messages: [...s.messages, errorMsg], isTyping: false }));
+        }
+    },
+
+    submitQuiz: async (messageId, answers) => {
+        const { activeSessionId, messages } = get();
+        if (!activeSessionId) return;
+
+        const targetMsg = messages.find(m => m.id === messageId);
+        if (!targetMsg?.quizData) return;
+
+        // Optimistically update to show a loading state or just mark as completed immediately
+        set((s) => {
+            const updated = s.messages.map(m => {
+                if (m.id === messageId && m.quizState) {
+                    return {
+                        ...m,
+                        quizState: {
+                            ...m.quizState,
+                            answers,
+                            isCompleted: true, // We can keep this true or add isLoading
+                        }
+                    };
+                }
+                return m;
+            });
+            return { messages: updated };
+        });
+
+        try {
+            const { submitQuizAnswer, getQuizScore } = require('../services/tutorService');
+            
+            // Evaluate all answers
+            const evaluationsPromises = Object.entries(answers).map(([questionId, selected_answer]) => 
+                submitQuizAnswer({
+                    session_id: activeSessionId,
+                    quiz_id: targetMsg.quizData!.quiz_id,
+                    question_id: questionId,
+                    selected_answer,
+                })
+            );
+            
+            const evalsArr = await Promise.all(evaluationsPromises);
+            const evaluations: Record<string, import('../types/tutor').QuizAnswerResponse> = {};
+            evalsArr.forEach(e => {
+                evaluations[e.question_id] = e;
+            });
+
+            // Update state with evaluations
+            set((s) => {
+                const updated = s.messages.map(m => {
+                    if (m.id === messageId && m.quizState) {
+                        return {
+                            ...m,
+                            quizState: {
+                                ...m.quizState,
+                                evaluations
+                            }
+                        };
+                    }
+                    return m;
+                });
+                return { messages: updated };
+            });
+
+            // Get final score
+            const scoreRes = await getQuizScore({ session_id: activeSessionId, quiz_id: targetMsg.quizData.quiz_id });
+            
+            const scoreMsg: import('../types/tutor').ChatMessage = {
+                id: mkId(),
+                role: 'assistant',
+                text: `📊 **Quiz Results**\n\nYou scored ${scoreRes.correct_answers} out of ${scoreRes.total_questions} (${scoreRes.score_percentage}%).\n\n${scoreRes.feedback}`,
+                timestamp: new Date().toISOString(),
+            };
+
+            set((s) => ({ messages: [...s.messages, scoreMsg] }));
+        } catch (error) {
+            console.error("Failed to fetch quiz score/answers", error);
         }
     },
 }));

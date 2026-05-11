@@ -4,6 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useColors } from '../../hooks/useColors';
 
+const animatedMessageIds = new Set<string>();
+
 export type Message = {
     id: string;
     role: 'user' | 'ai' | 'assistant';
@@ -24,40 +26,87 @@ interface MessageBubbleProps {
     onRetry?: (lastUserMessage: string) => void;
     onRegenerate?: (id: string) => void;
     onEdit?: (id: string) => void;
+    isLatest?: boolean;
 }
 
 const TypingDots = () => {
-    const [dot1] = useState(new Animated.Value(0.3));
-    const [dot2] = useState(new Animated.Value(0.3));
-    const [dot3] = useState(new Animated.Value(0.3));
+    const animValue = React.useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
-        const animateDot = (dot: Animated.Value, delay: number) => {
-            Animated.loop(
-                Animated.sequence([
-                    Animated.timing(dot, { toValue: 1, duration: 300, useNativeDriver: true, delay }),
-                    Animated.timing(dot, { toValue: 0.3, duration: 300, useNativeDriver: true })
-                ])
-            ).start();
+        let isMounted = true;
+        const startAnim = () => {
+            if (!isMounted) return;
+            animValue.setValue(0);
+            Animated.timing(animValue, {
+                toValue: 1,
+                duration: 1000,
+                useNativeDriver: true,
+            }).start(({ finished }) => {
+                if (finished && isMounted) {
+                    startAnim();
+                }
+            });
         };
+        startAnim();
 
-        animateDot(dot1, 0);
-        animateDot(dot2, 150);
-        animateDot(dot3, 300);
-    }, []);
+        return () => {
+            isMounted = false;
+        };
+    }, [animValue]);
+
+    const dot1Opacity = animValue.interpolate({ inputRange: [0, 0.2, 0.4, 1], outputRange: [0.3, 1, 0.3, 0.3] });
+    const dot2Opacity = animValue.interpolate({ inputRange: [0, 0.2, 0.4, 0.6, 1], outputRange: [0.3, 0.3, 1, 0.3, 0.3] });
+    const dot3Opacity = animValue.interpolate({ inputRange: [0, 0.4, 0.6, 0.8, 1], outputRange: [0.3, 0.3, 0.3, 1, 0.3] });
 
     return (
         <View style={styles.typingContainer}>
-            <Animated.View style={[styles.typingDot, { opacity: dot1 }]} />
-            <Animated.View style={[styles.typingDot, { opacity: dot2 }]} />
-            <Animated.View style={[styles.typingDot, { opacity: dot3 }]} />
+            <Animated.View style={[styles.typingDot, { opacity: dot1Opacity }]} />
+            <Animated.View style={[styles.typingDot, { opacity: dot2Opacity }]} />
+            <Animated.View style={[styles.typingDot, { opacity: dot3Opacity }]} />
         </View>
     );
 };
 
-export function MessageBubble({ message, onLike, onDislike, onRetry, onRegenerate, onEdit }: MessageBubbleProps) {
+export function MessageBubble({ message, onLike, onDislike, onRetry, onRegenerate, onEdit, isLatest }: MessageBubbleProps) {
     const isUser = message.role === 'user';
     const colors = useColors();
+
+    const [displayedText, setDisplayedText] = useState(() => {
+        const fullText = message.text || message.content || '';
+        if (isUser || !fullText || !isLatest || message.isError || animatedMessageIds.has(message.id)) {
+            return fullText;
+        }
+        return '';
+    });
+
+    useEffect(() => {
+        const fullText = message.text || message.content || '';
+        if (isUser || !isLatest || message.isError || animatedMessageIds.has(message.id)) {
+            setDisplayedText(fullText);
+            return;
+        }
+
+        if (displayedText.length >= fullText.length) {
+            if (fullText.length > 0) animatedMessageIds.add(message.id);
+            return;
+        }
+
+        const words = fullText.split(' ');
+        let currentWordCount = displayedText ? displayedText.split(' ').length : 0;
+
+        const interval = setInterval(() => {
+            currentWordCount += 2;
+            if (currentWordCount >= words.length) {
+                setDisplayedText(fullText);
+                animatedMessageIds.add(message.id);
+                clearInterval(interval);
+            } else {
+                setDisplayedText(words.slice(0, currentWordCount).join(' ') + (currentWordCount < words.length ? ' █' : ''));
+            }
+        }, 30);
+
+        return () => clearInterval(interval);
+    }, [message.text, message.content, isUser, message.id, message.isError]);
 
     const handleCopy = async () => {
         const textToCopy = message.text || message.content;
@@ -112,7 +161,7 @@ export function MessageBubble({ message, onLike, onDislike, onRetry, onRegenerat
                     {message.isTyping ? (
                         <TypingDots />
                     ) : (
-                        <Text style={[styles.aiText, { color: colors.black }]}>{message.text || message.content}</Text>
+                        <Text style={[styles.aiText, { color: colors.black }]}>{displayedText}</Text>
                     )}
                 </View>
                 {!message.isTyping && (

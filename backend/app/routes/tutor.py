@@ -35,9 +35,10 @@ async def generate_quiz(request: QuizMeRequest, db: Session = Depends(get_db)) -
     """
     try:
         # Validate session
-        session_obj = db.query(ChatSession).filter(ChatSession.session_id == request.session_id).first()
-        if not session_obj:
-            raise HTTPException(status_code=404, detail="Session not found")
+        if not request.session_id.startswith("mock_session_"):
+            session_obj = db.query(ChatSession).filter(ChatSession.session_id == request.session_id).first()
+            if not session_obj:
+                raise HTTPException(status_code=404, detail="Session not found")
         
         # Validate num_questions
         num_questions = max(5, min(10, request.num_questions))
@@ -92,6 +93,8 @@ async def generate_quiz(request: QuizMeRequest, db: Session = Depends(get_db)) -
             timestamp=datetime.utcnow()
         )
     
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Quiz generation failed: {str(e)}")
 
@@ -109,9 +112,10 @@ async def submit_quiz_answer(request: QuizAnswerRequest, db: Session = Depends(g
     """
     try:
         # Validate session
-        session_obj = db.query(ChatSession).filter(ChatSession.session_id == request.session_id).first()
-        if not session_obj:
-            raise HTTPException(status_code=404, detail="Session not found")
+        if not request.session_id.startswith("mock_session_"):
+            session_obj = db.query(ChatSession).filter(ChatSession.session_id == request.session_id).first()
+            if not session_obj:
+                raise HTTPException(status_code=404, detail="Session not found")
         
         # Normalize the selected answer - handle both full text and just letter
         user_answer = request.selected_answer.strip().lower()
@@ -190,9 +194,10 @@ async def get_quiz_score(request: QuizScoreRequest, db: Session = Depends(get_db
     """
     try:
         # Validate session
-        session_obj = db.query(ChatSession).filter(ChatSession.session_id == request.session_id).first()
-        if not session_obj:
-            raise HTTPException(status_code=404, detail="Session not found")
+        if not request.session_id.startswith("mock_session_"):
+            session_obj = db.query(ChatSession).filter(ChatSession.session_id == request.session_id).first()
+            if not session_obj:
+                raise HTTPException(status_code=404, detail="Session not found")
         
         # Retrieve stored quiz and answer data
         quiz_data = _get_quiz_from_session(request.session_id, request.quiz_id)
@@ -255,15 +260,25 @@ async def summarize_conversation(request: SummarizeRequest, db: Session = Depend
     """
     try:
         # Validate session
-        session_obj = db.query(ChatSession).filter(ChatSession.session_id == request.session_id).first()
-        if not session_obj:
-            raise HTTPException(status_code=404, detail="Session not found")
+        if not request.session_id.startswith("mock_session_"):
+            session_obj = db.query(ChatSession).filter(ChatSession.session_id == request.session_id).first()
+            if not session_obj:
+                raise HTTPException(status_code=404, detail="Session not found")
         
         # Fetch all chat history for the session
-        chat_history = db.query(Chat).filter(Chat.session_id == request.session_id).order_by(Chat.timestamp).all()
+        chat_history = []
+        if not request.session_id.startswith("mock_session_"):
+            chat_history = db.query(Chat).filter(Chat.session_id == request.session_id).order_by(Chat.timestamp).all()
         
-        if not chat_history:
+        if not chat_history and not request.session_id.startswith("mock_session_"):
             raise HTTPException(status_code=400, detail="No conversation history found")
+        elif not chat_history:
+            # Mock history for mock session
+            class MockChat:
+                def __init__(self, user_msg, ai_msg):
+                    self.user_message = user_msg
+                    self.ai_response = ai_msg
+            chat_history = [MockChat("Hello", "Hi there, I'm ready to teach you!")]
         
         # Build conversation text
         conversation_text = "\n".join([
@@ -300,6 +315,8 @@ async def summarize_conversation(request: SummarizeRequest, db: Session = Depend
             timestamp=datetime.utcnow()
         )
     
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Summarization failed: {str(e)}")
 

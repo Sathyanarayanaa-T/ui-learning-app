@@ -62,7 +62,7 @@ export default function TabsLayout() {
                     }}
                 />
                 <Tabs.Screen 
-                    name="history" 
+                    name="coach" 
                     options={{
                         title: 'Achievements',
                         tabBarIcon: ({ color }) => (
